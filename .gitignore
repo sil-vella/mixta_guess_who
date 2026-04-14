@@ -42,10 +42,24 @@ mixta_flutter/.flutter-plugins-dependencies
 mixta_flask/tools/logger/*.log
 cdp-output/
 
+# Backups & snapshots (everything under these dirs + common backup suffixes)
+**/backup/
+**/backups/
+**/*.bak
+*.backup
+*.old
+*~
+*.orig
+*.sql.gz
+*.sql.bz2
+*.dump
+*.dmp
+
 # Bulk / downloaded celebrity faces (any file type; too large for typical git)
 mixta_flask/plugins/game_plugin/modules/question_module/celeb_data/images/
 
-# Stray image drops at repo root only (does not ignore mixta_flutter/assets etc.)
+# Binary images — not tracked (use LFS, CI artifacts, or local copies as needed).
+# Covers repo root drops and Flutter `assets/` (fonts/json/etc. under assets/ stay tracked if not listed).
 /*.png
 /*.jpg
 /*.jpeg
@@ -71,3 +85,28 @@ mixta_flask/plugins/game_plugin/modules/question_module/celeb_data/images/
 /*.hdr
 /*.ktx
 /*.ktx2
+mixta_flutter/assets/**/*.png
+mixta_flutter/assets/**/*.jpg
+mixta_flutter/assets/**/*.jpeg
+mixta_flutter/assets/**/*.jpe
+mixta_flutter/assets/**/*.webp
+mixta_flutter/assets/**/*.gif
+mixta_flutter/assets/**/*.bmp
+mixta_flutter/assets/**/*.tif
+mixta_flutter/assets/**/*.tiff
+mixta_flutter/assets/**/*.ico
+mixta_flutter/assets/**/*.svg
+mixta_flutter/assets/**/*.heic
+mixta_flutter/assets/**/*.heif
+mixta_flutter/assets/**/*.avif
+mixta_flutter/assets/**/*.jfif
+mixta_flutter/assets/**/*.pjpeg
+mixta_flutter/assets/**/*.pjp
+mixta_flutter/assets/**/*.raw
+mixta_flutter/assets/**/*.cr2
+mixta_flutter/assets/**/*.nef
+mixta_flutter/assets/**/*.psd
+mixta_flutter/assets/**/*.exr
+mixta_flutter/assets/**/*.hdr
+mixta_flutter/assets/**/*.ktx
+mixta_flutter/assets/**/*.ktx2
