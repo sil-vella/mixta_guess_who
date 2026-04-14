@@ -1,0 +1,286 @@
+#!/bin/bash
+
+# Flutter Web build script
+# Builds a web release for Dutch and uploads to VPS
+# The web app will be served from dutch.mt
+# To deploy to a subdir (e.g. dutch.mt/example): DEPLOY_SUBDIR=example ./build_web.sh vps
+#   (Build the Flutter app with base-href /example/ when targeting the subdir.)
+
+set -e
+
+echo "🚀 Building Flutter Web for Dutch..."
+
+# Resolve repository root (two levels up from this script)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FRONTEND_ENV="$REPO_ROOT/.env.prod"
+
+# Determine backend target from first argument: 'local' or 'vps' (default: vps for production)
+BACKEND_TARGET="${1:-vps}"
+
+if [ "$BACKEND_TARGET" = "local" ]; then
+    # Local LAN IP for Python & Dart services
+    API_URL="http://192.168.178.81:5001"
+    WS_URL="ws://192.168.178.81:8080"
+    echo "💻 Using LOCAL backend: API_URL=$API_URL, WS_URL=$WS_URL"
+else
+    API_URL="https://dutch.mt"
+    WS_URL="wss://dutch.mt/ws"
+    echo "🌐 Using VPS backend: API_URL=$API_URL, WS_URL=$WS_URL"
+fi
+
+# Load env from repo root .env.prod (APP_VERSION, Firebase, GOOGLE_CLIENT_ID, Stripe, AdMob, AdSense, etc.)
+if [ -f "$FRONTEND_ENV" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$FRONTEND_ENV"
+  set +a
+else
+  echo "⚠️  Warning: $FRONTEND_ENV not found — dart-defines (Firebase, Google Sign-In, etc.) will be empty."
+fi
+
+# APP_VERSION SSOT: .env.prod; interactive patch bump shared with build_apk.sh
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/bump_app_version_prompt.sh"
+bump_app_version_prompt
+
+# Derive a numeric build number from APP_VERSION (e.g. 2.1.0 -> 20100)
+IFS='.' read -r APP_MAJOR APP_MINOR APP_PATCH <<< "$APP_VERSION"
+APP_MAJOR=${APP_MAJOR:-0}
+APP_MINOR=${APP_MINOR:-0}
+APP_PATCH=${APP_PATCH:-0}
+if ! [[ "$APP_MAJOR" =~ ^[0-9]+$ ]]; then APP_MAJOR=0; fi
+if ! [[ "$APP_MINOR" =~ ^[0-9]+$ ]]; then APP_MINOR=0; fi
+if ! [[ "$APP_PATCH" =~ ^[0-9]+$ ]]; then APP_PATCH=0; fi
+BUILD_NUMBER=$((APP_MAJOR * 10000 + APP_MINOR * 100 + APP_PATCH))
+echo "🔢 Using BUILD_NUMBER=$BUILD_NUMBER"
+
+# Navigate to Flutter project directory
+cd "$REPO_ROOT/mixta_flutter"
+
+# Disable LOGGING_SWITCH in all Dart files before build
+echo ""
+echo "🔇 Disabling LOGGING_SWITCH in Flutter sources..."
+FLUTTER_DIR="$REPO_ROOT/mixta_flutter"
+REPLACED_FILES=0
+REPLACED_OCCURRENCES=0
+
+# Predefined variable value to avoid accidentally replacing other 'true' values
+logging_switch_variable_value="true"
+
+while IFS= read -r -d '' dart_file; do
+    # Check if file contains LOGGING_SWITCH = false pattern
+    if grep -q "LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null || \
+       grep -q "const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null || \
+       grep -q "static const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null; then
+        # Count occurrences before replacement
+        OCCURRENCES=$(grep -o "LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')
+        OCCURRENCES=$((OCCURRENCES + $(grep -o "const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')))
+        OCCURRENCES=$((OCCURRENCES + $(grep -o "static const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')))
+        
+        # Use sed for in-place replacement (works on both macOS and Linux)
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/LOGGING_SWITCH = ${logging_switch_variable_value}/LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i '' "s/const bool LOGGING_SWITCH = ${logging_switch_variable_value}/const bool LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i '' "s/static const bool LOGGING_SWITCH = ${logging_switch_variable_value}/static const bool LOGGING_SWITCH = false/g" "$dart_file"
+        else
+            sed -i "s/LOGGING_SWITCH = ${logging_switch_variable_value}/LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i "s/const bool LOGGING_SWITCH = ${logging_switch_variable_value}/const bool LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i "s/static const bool LOGGING_SWITCH = ${logging_switch_variable_value}/static const bool LOGGING_SWITCH = false/g" "$dart_file"
+        fi
+        
+        REPLACED_OCCURRENCES=$((REPLACED_OCCURRENCES + OCCURRENCES))
+        REPLACED_FILES=$((REPLACED_FILES + 1))
+        REL_PATH="${dart_file#$FLUTTER_DIR/}"
+        echo "  ✓ Updated $REL_PATH ($OCCURRENCES occurrence(s))"
+    fi
+done < <(find "$FLUTTER_DIR" -name "*.dart" -type f -print0)
+
+if [ "$REPLACED_FILES" -eq 0 ]; then
+    echo "  ℹ️  No LOGGING_SWITCH = ${logging_switch_variable_value} found in Flutter sources (already disabled or not present)."
+else
+    echo "  ✅ Disabled LOGGING_SWITCH in $REPLACED_OCCURRENCES place(s) across $REPLACED_FILES file(s)"
+fi
+echo ""
+
+# Build --dart-define from .env (all vars) then overrides and build-only extras
+source "$SCRIPT_DIR/dart_defines_from_env.sh"
+DART_DEFINE_ARGS=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && DART_DEFINE_ARGS+=( "$line" )
+done < <(build_dart_defines_from_env "$FRONTEND_ENV")
+# Overrides (script-set API_URL, WS_URL, APP_VERSION)
+DART_DEFINE_ARGS+=( --dart-define=API_URL="$API_URL" --dart-define=WS_URL="$WS_URL" --dart-define=APP_VERSION="$APP_VERSION" )
+# Ensure Firebase runtime toggle is always present (defaults to true when missing).
+DART_DEFINE_ARGS+=( --dart-define=FIREBASE_SWITCH="${FIREBASE_SWITCH:-true}" )
+# Build-only (not in .env)
+DART_DEFINE_ARGS+=( \
+  --dart-define=JWT_ACCESS_TOKEN_EXPIRES=3600 \
+  --dart-define=JWT_REFRESH_TOKEN_EXPIRES=604800 \
+  --dart-define=JWT_TOKEN_REFRESH_COOLDOWN=300 \
+  --dart-define=JWT_TOKEN_REFRESH_INTERVAL=3600 \
+  --dart-define=FLUTTER_KEEP_SCREEN_ON=true \
+  --dart-define=DEBUG_MODE=true \
+  --dart-define=ENABLE_REMOTE_LOGGING=true \
+)
+
+# Build the web release
+echo "🌐 Building Flutter web release..."
+flutter build web \
+  --release \
+  --build-name="$APP_VERSION" \
+  --build-number="$BUILD_NUMBER" \
+  "${DART_DEFINE_ARGS[@]}"
+
+OUTPUT_DIR="$REPO_ROOT/mixta_flutter/build/web"
+
+if [ -d "$OUTPUT_DIR" ] && [ -f "$OUTPUT_DIR/index.html" ]; then
+  echo "✅ Web build completed: $OUTPUT_DIR"
+  INDEX_HTML="$OUTPUT_DIR/index.html"
+
+  # Verify AdSense snippet is in built index.html (for Google verification)
+  if grep -q "adsbygoogle.js" "$INDEX_HTML" && grep -q "ca-pub-" "$INDEX_HTML"; then
+    echo "✅ AdSense code snippet present in index.html (ready for Google verification)"
+  else
+    echo "❌ AdSense code snippet missing from built index.html."
+    echo "   Add the script tag to mixta_flutter/web/index.html and rebuild."
+    exit 1
+  fi
+
+  # Cache-bust: add ?v=$APP_VERSION so entry shell + bootstrap + linked shell assets get new URLs each release.
+  # (Flutter's service worker still hashes main.dart.js/canvaskit/assets; this fixes stale index.html/bootstrap.)
+  # Nginx (04_setup_nginx) should serve index.html with Cache-Control: no-cache so the HTML revalidates.
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|src=\"flutter_bootstrap.js\"|src=\"flutter_bootstrap.js?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"site.webmanifest\"|href=\"site.webmanifest?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"manifest.json\"|href=\"manifest.json?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"favicon.png\"|href=\"favicon.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"favicon-96x96.png\"|href=\"favicon-96x96.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"favicon.svg\"|href=\"favicon.svg?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"favicon.ico\"|href=\"favicon.ico?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"apple-touch-icon.png\"|href=\"apple-touch-icon.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i '' "s|href=\"icons/Icon-192.png\"|href=\"icons/Icon-192.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+  else
+    sed -i "s|src=\"flutter_bootstrap.js\"|src=\"flutter_bootstrap.js?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"site.webmanifest\"|href=\"site.webmanifest?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"manifest.json\"|href=\"manifest.json?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"favicon.png\"|href=\"favicon.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"favicon-96x96.png\"|href=\"favicon-96x96.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"favicon.svg\"|href=\"favicon.svg?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"favicon.ico\"|href=\"favicon.ico?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"apple-touch-icon.png\"|href=\"apple-touch-icon.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+    sed -i "s|href=\"icons/Icon-192.png\"|href=\"icons/Icon-192.png?v=$APP_VERSION\"|g" "$INDEX_HTML"
+  fi
+  echo "🔖 Cache-bust: added ?v=$APP_VERSION to index.html (bootstrap, site.webmanifest, favicons, icons)"
+
+  # Mandatory reload: inject no-cache meta tags so browsers and proxies don't serve a cached index.html.
+  # Together with Nginx sending Cache-Control: no-cache for index.html, this encourages a fresh load on each visit.
+  if grep -q "<head>" "$INDEX_HTML" && ! grep -q "Cache-Control.*no-cache" "$INDEX_HTML"; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' 's|<head>|<head><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">|' "$INDEX_HTML"
+    else
+      sed -i 's|<head>|<head><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">|' "$INDEX_HTML"
+    fi
+    echo "🔒 No-cache meta tags added to index.html (mandatory reload on login/visit)"
+  fi
+  echo "📊 Build size:"
+  du -sh "$OUTPUT_DIR"
+  echo ""
+  # Remove any .bak files from build output so they are not uploaded
+  BAK_COUNT=$(find "$OUTPUT_DIR" -name "*.bak" -type f 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$BAK_COUNT" -gt 0 ]; then
+    find "$OUTPUT_DIR" -name "*.bak" -type f -delete
+    echo "🧹 Removed $BAK_COUNT .bak file(s) from build output"
+  fi
+  echo "📁 Key files:"
+  ls -lh "$OUTPUT_DIR" | head -10
+else
+  echo "❌ Web build finished but $OUTPUT_DIR/index.html was not found. Check Flutter build output above."
+  exit 1
+fi
+
+# If building for VPS backend, upload web build to VPS
+if [ "$BACKEND_TARGET" = "vps" ]; then
+  # Default to non-root app user; override with VPS_SSH_TARGET if needed
+  VPS_SSH_TARGET="${VPS_SSH_TARGET:-rop01_user@65.181.125.135}"
+  # SSH key to use for uploads (defaults to same key as inventory.ini / 01_setup_ssh_key.sh)
+  VPS_SSH_KEY="${VPS_SSH_KEY:-$HOME/.ssh/rop01_key}"
+  REMOTE_WEB_ROOT="/var/www/dutch.reignofplay.com"
+  REMOTE_TMP_DIR="/tmp/dutch-web-$APP_VERSION-$$"
+
+  echo ""
+  echo "🌐 Uploading web build to VPS ($VPS_SSH_TARGET)..."
+  echo "📂 Remote path: $REMOTE_WEB_ROOT"
+  echo "📦 Temporary staging: $REMOTE_TMP_DIR"
+
+  # Create temporary directory on VPS (owned by remote user)
+  REMOTE_USER=$(echo "$VPS_SSH_TARGET" | cut -d'@' -f1)
+  ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" "sudo mkdir -p '$REMOTE_TMP_DIR' && sudo chown -R $REMOTE_USER:$REMOTE_USER '$REMOTE_TMP_DIR'"
+
+  # Upload all web build files to temporary directory
+  echo "📤 Uploading files..."
+  rsync -avz --progress \
+    -e "ssh -i $VPS_SSH_KEY" \
+    "$OUTPUT_DIR/" \
+    "$VPS_SSH_TARGET:$REMOTE_TMP_DIR/"
+
+  # Move files to web root with proper permissions
+  echo "📦 Installing files to web root..."
+  ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" <<EOF
+    # Copy to subdir (e.g. dutch.mt/example) or to main web root
+    DEPLOY_SUBDIR="${DEPLOY_SUBDIR:-}"
+    if [ -n "$DEPLOY_SUBDIR" ]; then
+      DEPLOY_DEST="$REMOTE_WEB_ROOT/$DEPLOY_SUBDIR"
+      echo "📋 Deploying to subdir: $DEPLOY_DEST"
+      sudo mkdir -p "$DEPLOY_DEST"
+      sudo rm -rf "$DEPLOY_DEST"/* 2>/dev/null || true
+      sudo cp -r "$REMOTE_TMP_DIR"/* "$DEPLOY_DEST/"
+    else
+      # Backup existing web files (if any) to a timestamped backup
+      if [ -d "$REMOTE_WEB_ROOT" ] && [ "\$(ls -A $REMOTE_WEB_ROOT 2>/dev/null)" ]; then
+        BACKUP_DIR="/tmp/dutch-web-backup-\$(date +%Y%m%d-%H%M%S)"
+        echo "💾 Backing up existing files to: \$BACKUP_DIR"
+        sudo mkdir -p "\$BACKUP_DIR"
+        sudo cp -r "$REMOTE_WEB_ROOT"/* "\$BACKUP_DIR/" 2>/dev/null || true
+        echo "✅ Backup created: \$BACKUP_DIR"
+      fi
+
+      # Remove old web files (except static directories that should be preserved)
+      echo "🧹 Cleaning web root (preserving static directories)..."
+      sudo find "$REMOTE_WEB_ROOT" -mindepth 1 -maxdepth 1 \
+        ! -name "sponsors" \
+        ! -name "sim_players" \
+        ! -name "downloads" \
+        ! -name "example" \
+        ! -name "register" \
+        ! -name ".well-known" \
+        -exec rm -rf {} + 2>/dev/null || true
+
+      echo "📋 Installing new web build..."
+      sudo cp -r "$REMOTE_TMP_DIR"/* "$REMOTE_WEB_ROOT/"
+    fi
+    
+    # Set proper ownership and permissions
+    echo "🔐 Setting permissions..."
+    sudo chown -R www-data:www-data "$REMOTE_WEB_ROOT"
+    sudo find "$REMOTE_WEB_ROOT" -type f -exec chmod 644 {} \;
+    sudo find "$REMOTE_WEB_ROOT" -type d -exec chmod 755 {} \;
+    
+    # Clean up temporary directory
+    sudo rm -rf "$REMOTE_TMP_DIR"
+    
+    echo "✅ Web build installed successfully!"
+EOF
+
+  echo ""
+  if [ -n "${DEPLOY_SUBDIR:-}" ]; then
+    echo "✅ Web build uploaded to VPS: $REMOTE_WEB_ROOT/$DEPLOY_SUBDIR"
+    echo "🔗 Web app URL: https://dutch.mt/$DEPLOY_SUBDIR"
+  else
+    echo "✅ Web build uploaded and installed to VPS: $REMOTE_WEB_ROOT"
+    echo "🔗 Web app URL: https://dutch.mt"
+  fi
+  echo "📊 Version: $APP_VERSION"
+  echo ""
+  echo "🎉 Deployment complete! The Flutter web app is now live."
+fi

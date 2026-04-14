@@ -1,0 +1,132 @@
+[
+  {
+    "username": "sampickle",
+    "email": "sampickle@cp.com",
+    "level": 2,
+    "rank": "Beginner",
+    "coins": 1000,
+    "first_name": "Sam",
+    "last_name": "Pickle",
+    "picture": "https://dutch.mt/sim_players/images/img000.jpg"
+  },
+  {
+    "username": "emmafox",
+    "email": "emmafox@cp.com",
+    "level": 9,
+    "rank": "Beginner",
+    "coins": 1000,
+    "first_name": "Emma",
+    "last_name": "Fox",
+    "picture": "https://dutch.mt/sim_players/images/img001.jpg"
+  },
+  {
+    "username": "zoebean668",
+    "email": "zoebean668@cp.com",
+    "level": 1,
+    "rank": "Beginner",
+    "coins": 1000,
+    "first_name": "Zoe",
+    "last_name": "Bean",
+    "picture": "https://dutch.mt/sim_players/images/img002.jpg"
+  },
+  {
+    "username": "toastlord",
+    "email": "toastlord@cp.com",
+    "level": 4,
+    "rank": "Beginner",
+    "coins": 1000,
+    "first_name": "Toast",
+    "last_name": "Evans",
+    "picture": "https://dutch.mt/sim_players/images/img003.jpg"
+  },
+  {
+    "username": "ben.leo6",
+    "email": "ben.leo6@cp.com",
+    "level": 10,
+    "rank": "Beginner",
+    "coins": 1000,
+    "first_name": "Ben",
+    "last_name": "Leo",
+    "picture": "https://dutch.mt/sim_players/images/img004.jpg"
+  },
+  {
+    "username": "fred_noah1",
+    "email": "fred_noah1@cp.com",
+    "level": 89,
+    "rank": "Elite",
+    "coins": 1000,
+    "first_name": "Fred",
+    "last_name": "Noah",
+    "picture": "https://dutch.mt/sim_players/images/img492.jpg"
+  },
+  {
+    "username": "ryan_tom",
+    "email": "ryan_tom@cp.com",
+    "level": 81,
+    "rank": "Elite",
+    "coins": 1000,
+    "first_name": "Ryan",
+    "last_name": "Tom",
+    "picture": "https://dutch.mt/sim_players/images/img493.jpg"
+  },
+  {
+    "username": "duckirl",
+    "email": "duckirl@cp.com",
+    "level": 81,
+    "rank": "Elite",
+    "coins": 1000,
+    "first_name": "Ducki",
+    "last_name": "Nguyen",
+    "picture": "https://dutch.mt/sim_players/images/img494.jpg"
+  },
+  {
+    "username": "katesleepy354",
+    "email": "katesleepy354@cp.com",
+    "level": 97,
+    "rank": "Legend",
+    "coins": 1000,
+    "first_name": "Kates",
+    "last_name": "Clark",
+    "picture": "https://dutch.mt/sim_players/images/img495.jpg"
+  },
+  {
+    "username": "mikevoid",
+    "email": "mikevoid@cp.com",
+    "level": 96,
+    "rank": "Legend",
+    "coins": 1000,
+    "first_name": "Mikev",
+    "last_name": "Alvarez",
+    "picture": "https://dutch.mt/sim_players/images/img496.jpg"
+  },
+  {
+    "username": "amywobbly",
+    "email": "amywobbly@cp.com",
+    "level": 94,
+    "rank": "Legend",
+    "coins": 1000,
+    "first_name": "Amywo",
+    "last_name": "Moore",
+    "picture": "https://dutch.mt/sim_players/images/img497.jpg"
+  },
+  {
+    "username": "fredwobbly",
+    "email": "fredwobbly@cp.com",
+    "level": 97,
+    "rank": "Legend",
+    "coins": 1000,
+    "first_name": "Fredw",
+    "last_name": "Jackson",
+    "picture": "https://dutch.mt/sim_players/images/img498.jpg"
+  },
+  {
+    "username": "rubypickle",
+    "email": "rubypickle@cp.com",
+    "level": 96,
+    "rank": "Legend",
+    "coins": 1000,
+    "first_name": "Ruby",
+    "last_name": "Pickle",
+    "picture": "https://dutch.mt/sim_players/images/img499.jpg"
+  }
+]

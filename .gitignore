@@ -1,0 +1,73 @@
+# OS / IDE
+.DS_Store
+.idea/
+*.iml
+
+# Environment & secrets (keep example/sample templates if you add them)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+.envrc
+.direnv/
+*.env
+*.env.local
+*.env.development
+*.env.development.local
+*.env.production
+*.env.prod
+*.env.production.local
+*.env.test
+*.env.staging
+.flaskenv
+flaskenv.local
+
+# Python
+venv/
+.venv/
+venv.backup.*/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Flutter / Dart
+mixta_flutter/build/
+mixta_flutter/.dart_tool/
+mixta_flutter/.flutter-plugins
+mixta_flutter/.flutter-plugins-dependencies
+
+# Logs / local tooling output
+mixta_flask/tools/logger/*.log
+cdp-output/
+
+# Bulk / downloaded celebrity faces (any file type; too large for typical git)
+mixta_flask/plugins/game_plugin/modules/question_module/celeb_data/images/
+
+# Stray image drops at repo root only (does not ignore mixta_flutter/assets etc.)
+/*.png
+/*.jpg
+/*.jpeg
+/*.jpe
+/*.webp
+/*.gif
+/*.bmp
+/*.tif
+/*.tiff
+/*.ico
+/*.svg
+/*.heic
+/*.heif
+/*.avif
+/*.jfif
+/*.pjpeg
+/*.pjp
+/*.raw
+/*.cr2
+/*.nef
+/*.psd
+/*.exr
+/*.hdr
+/*.ktx
+/*.ktx2

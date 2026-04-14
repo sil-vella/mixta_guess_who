@@ -1,0 +1,234 @@
+#!/bin/bash
+
+# Flutter APK build script
+# Builds an Android APK for Dutch with the same dart-define envs
+# used by the OnePlus launcher script, targeting either LOCAL or VPS backend.
+
+set -e
+
+echo "🚀 Building Flutter APK for Dutch..."
+
+# Resolve repository root (two levels up from this script)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FRONTEND_ENV="$REPO_ROOT/.env.prod"
+
+# Determine backend target from first argument: 'local' or 'vps' (default: vps for distribution)
+BACKEND_TARGET="${1:-vps}"
+
+if [ "$BACKEND_TARGET" = "local" ]; then
+    # Local LAN IP for Python & Dart services
+    API_URL="http://192.168.178.81:5001"
+    WS_URL="ws://192.168.178.81:8080"
+    echo "💻 Using LOCAL backend: API_URL=$API_URL, WS_URL=$WS_URL"
+else
+    API_URL="https://dutch.mt"
+    WS_URL="wss://dutch.mt/ws"
+    echo "🌐 Using VPS backend: API_URL=$API_URL, WS_URL=$WS_URL"
+fi
+
+# Load env from repo root .env.prod (APP_VERSION, Firebase, GOOGLE_CLIENT_ID, Stripe, AdMob, AdSense, etc.)
+if [ -f "$FRONTEND_ENV" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$FRONTEND_ENV"
+  set +a
+else
+  echo "⚠️  Warning: $FRONTEND_ENV not found — dart-defines (Firebase, Google Sign-In, etc.) will be empty."
+fi
+
+# APP_VERSION SSOT: .env.prod; interactive patch bump shared with build_web.sh
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/bump_app_version_prompt.sh"
+bump_app_version_prompt
+
+# Derive a numeric build number from APP_VERSION (e.g. 2.1.0 -> 20100)
+IFS='.' read -r APP_MAJOR APP_MINOR APP_PATCH <<< "$APP_VERSION"
+APP_MAJOR=${APP_MAJOR:-0}
+APP_MINOR=${APP_MINOR:-0}
+APP_PATCH=${APP_PATCH:-0}
+if ! [[ "$APP_MAJOR" =~ ^[0-9]+$ ]]; then APP_MAJOR=0; fi
+if ! [[ "$APP_MINOR" =~ ^[0-9]+$ ]]; then APP_MINOR=0; fi
+if ! [[ "$APP_PATCH" =~ ^[0-9]+$ ]]; then APP_PATCH=0; fi
+BUILD_NUMBER=$((APP_MAJOR * 10000 + APP_MINOR * 100 + APP_PATCH))
+echo "🔢 Using BUILD_NUMBER=$BUILD_NUMBER"
+
+# Navigate to Flutter project directory
+cd "$REPO_ROOT/mixta_flutter"
+
+# Disable LOGGING_SWITCH in all Dart files before build
+echo ""
+echo "🔇 Disabling LOGGING_SWITCH in Flutter sources..."
+FLUTTER_DIR="$REPO_ROOT/mixta_flutter"
+REPLACED_FILES=0
+REPLACED_OCCURRENCES=0
+
+# Predefined variable value to avoid accidentally replacing other 'true' values
+logging_switch_variable_value="true"
+
+while IFS= read -r -d '' dart_file; do
+    # Check if file contains LOGGING_SWITCH = false pattern
+    if grep -q "LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null || \
+       grep -q "const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null || \
+       grep -q "static const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" 2>/dev/null; then
+        # Count occurrences before replacement
+        OCCURRENCES=$(grep -o "LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')
+        OCCURRENCES=$((OCCURRENCES + $(grep -o "const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')))
+        OCCURRENCES=$((OCCURRENCES + $(grep -o "static const bool LOGGING_SWITCH = ${logging_switch_variable_value}" "$dart_file" | wc -l | tr -d ' ')))
+        
+        # Use sed for in-place replacement (works on both macOS and Linux)
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/LOGGING_SWITCH = ${logging_switch_variable_value}/LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i '' "s/const bool LOGGING_SWITCH = ${logging_switch_variable_value}/const bool LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i '' "s/static const bool LOGGING_SWITCH = ${logging_switch_variable_value}/static const bool LOGGING_SWITCH = false/g" "$dart_file"
+        else
+            sed -i "s/LOGGING_SWITCH = ${logging_switch_variable_value}/LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i "s/const bool LOGGING_SWITCH = ${logging_switch_variable_value}/const bool LOGGING_SWITCH = false/g" "$dart_file"
+            sed -i "s/static const bool LOGGING_SWITCH = ${logging_switch_variable_value}/static const bool LOGGING_SWITCH = false/g" "$dart_file"
+        fi
+        
+        REPLACED_OCCURRENCES=$((REPLACED_OCCURRENCES + OCCURRENCES))
+        REPLACED_FILES=$((REPLACED_FILES + 1))
+        REL_PATH="${dart_file#$FLUTTER_DIR/}"
+        echo "  ✓ Updated $REL_PATH ($OCCURRENCES occurrence(s))"
+    fi
+done < <(find "$FLUTTER_DIR" -name "*.dart" -type f -print0)
+
+if [ "$REPLACED_FILES" -eq 0 ]; then
+    echo "  ℹ️  No LOGGING_SWITCH = ${logging_switch_variable_value} found in Flutter sources (already disabled or not present)."
+else
+    echo "  ✅ Disabled LOGGING_SWITCH in $REPLACED_OCCURRENCES place(s) across $REPLACED_FILES file(s)"
+fi
+echo ""
+
+# Build --dart-define from .env (all vars) then overrides and build-only extras
+source "$SCRIPT_DIR/dart_defines_from_env.sh"
+DART_DEFINE_ARGS=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && DART_DEFINE_ARGS+=( "$line" )
+done < <(build_dart_defines_from_env "$FRONTEND_ENV")
+# Overrides (script-set API_URL, WS_URL, APP_VERSION)
+DART_DEFINE_ARGS+=( --dart-define=API_URL="$API_URL" --dart-define=WS_URL="$WS_URL" --dart-define=APP_VERSION="$APP_VERSION" )
+# Ensure Firebase runtime toggle is always present (defaults to true when missing).
+DART_DEFINE_ARGS+=( --dart-define=FIREBASE_SWITCH="${FIREBASE_SWITCH:-true}" )
+# Build-only (not in .env)
+DART_DEFINE_ARGS+=( \
+  --dart-define=JWT_ACCESS_TOKEN_EXPIRES=3600 \
+  --dart-define=JWT_REFRESH_TOKEN_EXPIRES=604800 \
+  --dart-define=JWT_TOKEN_REFRESH_COOLDOWN=300 \
+  --dart-define=JWT_TOKEN_REFRESH_INTERVAL=3600 \
+  --dart-define=FLUTTER_KEEP_SCREEN_ON=true \
+  --dart-define=DEBUG_MODE=true \
+  --dart-define=ENABLE_REMOTE_LOGGING=true \
+)
+
+# Build the release APK
+flutter build apk \
+  --release \
+  --build-name="$APP_VERSION" \
+  --build-number="$BUILD_NUMBER" \
+  "${DART_DEFINE_ARGS[@]}"
+
+OUTPUT_APK="$REPO_ROOT/mixta_flutter/build/app/outputs/flutter-apk/app-release.apk"
+
+if [ -f "$OUTPUT_APK" ]; then
+  echo "✅ APK build completed: $OUTPUT_APK"
+  ls -lh "$OUTPUT_APK"
+else
+  echo "❌ APK build finished but $OUTPUT_APK was not found. Check Flutter build output above."
+  exit 1
+fi
+
+# If building for VPS backend, upload APK to VPS downloads directory
+if [ "$BACKEND_TARGET" = "vps" ]; then
+  # Default to non-root app user; override with VPS_SSH_TARGET if needed
+  VPS_SSH_TARGET="${VPS_SSH_TARGET:-rop01_user@65.181.125.135}"
+  # SSH key to use for uploads (defaults to same key as inventory.ini / 01_setup_ssh_key.sh)
+  VPS_SSH_KEY="${VPS_SSH_KEY:-$HOME/.ssh/rop01_key}"
+  REMOTE_DOWNLOAD_ROOT="/var/www/dutch.reignofplay.com/downloads"
+  REMOTE_VERSION_DIR="$REMOTE_DOWNLOAD_ROOT/v$APP_VERSION"
+  REMOTE_APK_PATH="$REMOTE_VERSION_DIR/app.apk"
+  REMOTE_TMP_APK="/tmp/dutch-app-$APP_VERSION.apk"
+  REMOTE_DATA_DIR="/opt/apps/reignofplay/dutch/data"
+  REMOTE_MANIFEST_PATH="$REMOTE_DATA_DIR/mobile_release.json"
+  REMOTE_TMP_MANIFEST="/tmp/mobile_release.json"
+  REMOTE_APP_DIR="/opt/apps/reignofplay/dutch"
+
+  log_remaining_vps_tasks() {
+    echo ""
+    echo "❌ VPS upload failed. REMAINING TASKS (run manually if needed):"
+    echo "  [1] Create version dir and upload APK:"
+    echo "      rsync -avz --progress -e \"ssh -i $VPS_SSH_KEY\" $OUTPUT_APK $VPS_SSH_TARGET:$REMOTE_TMP_APK"
+    echo "      ssh -i $VPS_SSH_KEY $VPS_SSH_TARGET \"sudo mkdir -p $REMOTE_VERSION_DIR && sudo mv $REMOTE_TMP_APK $REMOTE_APK_PATH && sudo chown www-data:www-data $REMOTE_APK_PATH && sudo chmod 644 $REMOTE_APK_PATH\""
+    echo "  [2] Update mobile_release.json on VPS:"
+    echo "      (create JSON with latest_version and min_supported_version: $APP_VERSION)"
+    echo "      scp to $VPS_SSH_TARGET:$REMOTE_TMP_MANIFEST"
+    echo "      ssh -i $VPS_SSH_KEY $VPS_SSH_TARGET \"sudo mv $REMOTE_TMP_MANIFEST $REMOTE_MANIFEST_PATH && sudo chown rop01_user:rop01_user $REMOTE_MANIFEST_PATH && sudo chmod 644 $REMOTE_MANIFEST_PATH\""
+    echo ""
+  }
+
+  echo "🌐 Uploading APK to VPS ($VPS_SSH_TARGET)..."
+  echo "📂 Remote path: $REMOTE_APK_PATH"
+
+  echo "  Step 1/5: Uploading APK to temporary location on VPS (rsync with compression)..."
+  if ! rsync -avz --progress -e "ssh -i $VPS_SSH_KEY" "$OUTPUT_APK" "$VPS_SSH_TARGET:$REMOTE_TMP_APK"; then
+    echo "❌ Step 1/5 failed: rsync APK to $REMOTE_TMP_APK"
+    log_remaining_vps_tasks
+    exit 1
+  fi
+
+  echo "  Step 2/5: Creating version dir and moving APK into place..."
+  if ! ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" "sudo mkdir -p '$REMOTE_VERSION_DIR' && sudo mv '$REMOTE_TMP_APK' '$REMOTE_APK_PATH' && sudo chown www-data:www-data '$REMOTE_APK_PATH' && sudo chmod 644 '$REMOTE_APK_PATH'"; then
+    echo "❌ Step 2/5 failed: mkdir/mv APK to $REMOTE_APK_PATH"
+    log_remaining_vps_tasks
+    exit 1
+  fi
+
+  echo "✅ APK uploaded to VPS: $REMOTE_APK_PATH"
+  echo "🔗 Expected download URL: https://dutch.mt/downloads/v$APP_VERSION/app.apk"
+
+  # Update mobile_release.json manifest on the VPS so Flask can serve
+  # correct version info without needing a restart.
+  MIN_SUPPORTED_VERSION="${MIN_SUPPORTED_VERSION:-$APP_VERSION}"
+
+  echo "  Step 3/5: Updating mobile_release.json manifest on VPS..."
+  TMP_MANIFEST="$(mktemp)"
+  cat > "$TMP_MANIFEST" <<EOF
+{
+  "latest_version": "$APP_VERSION",
+  "min_supported_version": "$MIN_SUPPORTED_VERSION"
+}
+EOF
+
+  if ! scp -i "$VPS_SSH_KEY" "$TMP_MANIFEST" "$VPS_SSH_TARGET":"$REMOTE_TMP_MANIFEST"; then
+    rm -f "$TMP_MANIFEST"
+    echo "❌ Step 3/5 failed: scp manifest to $REMOTE_TMP_MANIFEST"
+    log_remaining_vps_tasks
+    exit 1
+  fi
+  if ! ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" "sudo mv '$REMOTE_TMP_MANIFEST' '$REMOTE_MANIFEST_PATH' && sudo chown rop01_user:rop01_user '$REMOTE_MANIFEST_PATH' && sudo chmod 644 '$REMOTE_MANIFEST_PATH'"; then
+    rm -f "$TMP_MANIFEST"
+    echo "❌ Step 3/5 failed: mv manifest to $REMOTE_MANIFEST_PATH"
+    log_remaining_vps_tasks
+    exit 1
+  fi
+  rm -f "$TMP_MANIFEST"
+
+  echo "✅ mobile_release.json updated on VPS: $REMOTE_MANIFEST_PATH"
+
+  echo "  Step 4/5: Reloading Flask container (so /public/check-updates serves latest manifest)..."
+  if ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" "cd $REMOTE_APP_DIR && sg docker -c 'docker compose -f docker-compose.yml restart dutch_flask-external'"; then
+    echo "✅ Flask container restarted."
+  else
+    echo "⚠️  Flask restart skipped or failed (non-fatal). /public/check-updates may still see new manifest via bind mount."
+  fi
+
+  # Keep only current and previous APK version dirs; remove older ones to save disk space
+  echo "  Step 5/5: Removing old APK versions (keeping only current and previous)..."
+  if ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" "cd $REMOTE_DOWNLOAD_ROOT && ls -d v* 2>/dev/null | sort -V | head -n -2 | xargs -r sudo rm -rf 2>/dev/null; echo done"; then
+    echo "✅ Old APK version dirs removed (kept current + previous)."
+  else
+    echo "⚠️  Cleanup of old APK versions skipped or failed (non-fatal)."
+  fi
+fi
+

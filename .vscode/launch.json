@@ -1,0 +1,63 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "mixta_flutter (Chrome - web - Local Backend)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./playbooks/frontend/launch_chrome.sh local",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVER_LOG_FILE": "${workspaceFolder}/mixta_flask/tools/logger/server.log"
+            }
+        },
+        {
+            "name": "mixta_flutter (Chrome - web - VPS Backend)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./playbooks/frontend/launch_chrome.sh vps",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVER_LOG_FILE": "${workspaceFolder}/mixta_flask/tools/logger/server.log"
+            }
+        },
+        {
+            "name": "mixta_flutter OnePlus (Local Backend)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./playbooks/frontend/launch_oneplus.sh local",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVER_LOG_FILE": "${workspaceFolder}/mixta_flask/tools/logger/server.log"
+            }
+        },
+        {
+            "name": "mixta_flutter OnePlus (VPS Backend)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "./playbooks/frontend/launch_oneplus.sh vps",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVER_LOG_FILE": "${workspaceFolder}/mixta_flask/tools/logger/server.log"
+            }
+        },
+        {
+            "name": "Flask Local Debug (mixta_flask)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/mixta_flask/main.py",
+            "cwd": "${workspaceFolder}/mixta_flask",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "envFile": "${workspaceFolder}/.env.local",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "django": false,
+            "jinja": true,
+            "preLaunchTask": "Kill Flask and Dart Processes"
+        }
+    ]
+}

@@ -1,0 +1,53 @@
+name: mixta_guess_who
+description: Mixta App.
+publish_to: "none"
+version: 1.0.0+12
+
+environment:
+  sdk: ">=3.1.5 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_mobile_ads: ^5.2.0
+  provider: ^6.1.2
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  flutter_native_splash: ^2.4.1
+  just_audio: ^0.9.42
+  auto_size_text: ^3.0.0
+  confetti: ^0.8.0
+  cached_network_image: ^3.4.1
+  go_router: ^14.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/images/
+    - assets/images/backgrounds/
+
+
+flutter_native_splash:
+  color: "#ffffff" # Background color of the splash screen
+  image: assets/images/splash_screen.png # Path to your splash screen image
+  android: true # Enable for Android
+  ios: true # Enable for iOS
+  web: false # Set to true if you want a web splash screen
+  android_gravity: fill # Ensures the image fills the screen on Android
+  ios_content_mode: scaleToFill # Ensures the image fills the screen on iOS
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/icon.png"
+  adaptive_icon_background: "assets/images/icon_background.png" # Background image or color
+  adaptive_icon_foreground: "assets/images/icon_foreground.png"
+  remove_alpha_ios: true

@@ -1,0 +1,26 @@
+# Mixta local dev: MySQL only. Creds from `.env.local`.
+# Project name `mixta_dev` (below) keeps this stack distinct from any other compose project on your machine.
+# Run: `docker compose --env-file .env.local -f docker-compose.debug.yml up -d`
+# Compose interpolates `${...}` from `--env-file`; a default `.env` alone may not define MYSQL_* .
+
+name: mixta_dev
+
+services:
+  mixta_mysql:
+    image: mysql:8.0
+    container_name: mixta_mysql_dev
+    env_file: .env.local
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mixta_mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+volumes:
+  mixta_mysql_data:

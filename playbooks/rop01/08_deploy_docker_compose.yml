@@ -1,0 +1,401 @@
+---
+# Load env vars from app_dev/.env.prod on the controller so the deploy play can use them (no manual paste into vault).
+# Values from .env.prod are set as facts on localhost; the deploy play then uses hostvars['localhost'] with fallback to lookup('env').
+- name: Load app_dev/.env.prod for VPS deploy (optional)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    local_env_path: "{{ playbook_dir }}/../../.env.prod"
+  tasks:
+    - name: Check if app_dev/.env exists
+      stat:
+        path: "{{ local_env_path }}"
+      register: local_env_check
+
+    - name: Parse app_dev/.env.prod into JSON
+      shell: |
+        python3 << 'PYEOF'
+        import json, os, re
+        path = os.environ.get('LOCAL_ENV_PATH', '')
+        out = {}
+        if path and os.path.isfile(path):
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'): continue
+                    m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)$', line)
+                    if m:
+                        k, v = m.group(1), m.group(2).strip().strip('"').strip("'")
+                        out[k] = v
+        mapping = {
+            'MONGODB_ROOT_PASSWORD': 'mongodb_root_password', 'MONGODB_PASSWORD': 'mongodb_password',
+            'REDIS_PASSWORD': 'redis_password', 'JWT_SECRET_KEY': 'jwt_secret_key',
+            'ENCRYPTION_KEY': 'encryption_key', 'DART_BACKEND_SERVICE_KEY': 'dart_backend_service_key',
+            'DUTCH_MT_DASHBOARD_SERVICE_KEY': 'dutch_mt_dashboard_service_key',
+            'GOOGLE_CLIENT_ID': 'google_client_id', 'GOOGLE_CLIENT_SECRET': 'google_client_secret',
+            'APP_VERSION': 'app_version', 'APP_DOWNLOAD_BASE_URL': 'app_download_base_url',
+            'CREDIT_SYSTEM_API_KEY': 'credit_system_api_key',
+            'DUTCH_WINS_PER_USER_LEVEL': 'dutch_wins_per_user_level',
+            'DUTCH_LEVELS_PER_RANK': 'dutch_levels_per_rank',
+            'DUTCH_USER_LEVEL_MIN': 'dutch_user_level_min',
+            'DUTCH_RANK_HIERARCHY': 'dutch_rank_hierarchy',
+            'DUTCH_TABLES_JSON': 'dutch_tables_json',
+            'REGISTRATION_COIN_BONUS': 'registration_coin_bonus',
+            'STRIPE_SECRET_KEY': 'stripe_secret_key',
+            'STRIPE_PUBLISHABLE_KEY': 'stripe_publishable_key',
+            'STRIPE_WEBHOOK_SECRET': 'stripe_webhook_secret',
+            'STRIPE_PRICE_COIN_STARTER': 'stripe_price_coin_starter',
+            'STRIPE_PRICE_COIN_CASUAL': 'stripe_price_coin_casual',
+            'STRIPE_PRICE_COIN_POPULAR': 'stripe_price_coin_popular',
+            'STRIPE_PRICE_COIN_GRINDER': 'stripe_price_coin_grinder',
+            'STRIPE_PRICE_COIN_PRO': 'stripe_price_coin_pro',
+            'STRIPE_COIN_CHECKOUT_SUCCESS_URL': 'stripe_coin_checkout_success_url',
+            'STRIPE_COIN_CHECKOUT_CANCEL_URL': 'stripe_coin_checkout_cancel_url',
+        }
+        result = { v: out.get(k, '') for k, v in mapping.items() }
+        result.setdefault('app_version', '2.0.0')
+        result.setdefault('app_download_base_url', 'https://dutch.mt/downloads')
+        print(json.dumps(result))
+        PYEOF
+      register: env_json
+      changed_when: false
+      environment:
+        LOCAL_ENV_PATH: "{{ local_env_path }}"
+      when: local_env_check.stat.exists | default(false)
+
+    - name: Set env facts from app_dev/.env.prod
+      set_fact:
+        mongodb_root_password: "{{ (env_json.stdout | from_json).mongodb_root_password }}"
+        mongodb_password: "{{ (env_json.stdout | from_json).mongodb_password }}"
+        redis_password: "{{ (env_json.stdout | from_json).redis_password }}"
+        jwt_secret_key: "{{ (env_json.stdout | from_json).jwt_secret_key }}"
+        encryption_key: "{{ (env_json.stdout | from_json).encryption_key }}"
+        dart_backend_service_key: "{{ (env_json.stdout | from_json).dart_backend_service_key }}"
+        dutch_mt_dashboard_service_key: "{{ (env_json.stdout | from_json).dutch_mt_dashboard_service_key }}"
+        google_client_id: "{{ (env_json.stdout | from_json).google_client_id }}"
+        google_client_secret: "{{ (env_json.stdout | from_json).google_client_secret }}"
+        app_version: "{{ (env_json.stdout | from_json).app_version | default('2.0.0') }}"
+        app_download_base_url: "{{ (env_json.stdout | from_json).app_download_base_url | default('https://dutch.mt/downloads') }}"
+        credit_system_api_key: "{{ (env_json.stdout | from_json).credit_system_api_key | default('') }}"
+        dutch_wins_per_user_level: "{{ (env_json.stdout | from_json).dutch_wins_per_user_level | default('10') }}"
+        dutch_levels_per_rank: "{{ (env_json.stdout | from_json).dutch_levels_per_rank | default('5') }}"
+        dutch_user_level_min: "{{ (env_json.stdout | from_json).dutch_user_level_min | default('1') }}"
+        dutch_rank_hierarchy: "{{ (env_json.stdout | from_json).dutch_rank_hierarchy | default('beginner,novice,apprentice,skilled,advanced,expert,veteran,master,elite,legend') }}"
+        dutch_tables_json: "{{ (env_json.stdout | from_json).dutch_tables_json | default('') }}"
+        registration_coin_bonus: "{{ (env_json.stdout | from_json).registration_coin_bonus | default('500') }}"
+        stripe_secret_key: "{{ (env_json.stdout | from_json).stripe_secret_key | default('') }}"
+        stripe_publishable_key: "{{ (env_json.stdout | from_json).stripe_publishable_key | default('') }}"
+        stripe_webhook_secret: "{{ (env_json.stdout | from_json).stripe_webhook_secret | default('') }}"
+        stripe_price_coin_starter: "{{ (env_json.stdout | from_json).stripe_price_coin_starter | default('') }}"
+        stripe_price_coin_casual: "{{ (env_json.stdout | from_json).stripe_price_coin_casual | default('') }}"
+        stripe_price_coin_popular: "{{ (env_json.stdout | from_json).stripe_price_coin_popular | default('') }}"
+        stripe_price_coin_grinder: "{{ (env_json.stdout | from_json).stripe_price_coin_grinder | default('') }}"
+        stripe_price_coin_pro: "{{ (env_json.stdout | from_json).stripe_price_coin_pro | default('') }}"
+        stripe_coin_checkout_success_url: "{{ (env_json.stdout | from_json).stripe_coin_checkout_success_url | default('') }}"
+        stripe_coin_checkout_cancel_url: "{{ (env_json.stdout | from_json).stripe_coin_checkout_cancel_url | default('') }}"
+      when: local_env_check.stat.exists | default(false) and env_json.stdout | length > 0
+
+- name: Deploy Docker Compose Application
+  hosts: "{{ vm_name }}_user"
+  become: true
+  vars:
+    app_dir: "/opt/apps/reignofplay/dutch"
+    data_dir: "/opt/apps/reignofplay/dutch/data"
+    compose_file: "docker-compose.yml"
+    vps_user: "{{ vm_name }}_user"
+    # Local repo root: directory containing python_base_04, playbooks, etc. Default assumes playbook run from app_dev (playbook_dir = playbooks/rop01).
+    # Override with -e local_repo_root=/path/to/app_dev if running from elsewhere.
+    local_repo_root: "{{ playbook_dir }}/../.."
+  tasks:
+    # Use env vars from app_dev/.env.prod (play 1) or vault/lookup('env'); template env.j2 uses these.
+    - name: Set deploy env vars from localhost (app_dev/.env.prod) or shell/vault
+      set_fact:
+        mongodb_root_password: "{{ (hostvars['localhost'] | default({})).get('mongodb_root_password') or lookup('env', 'MONGODB_ROOT_PASSWORD') | default('') }}"
+        mongodb_password: "{{ (hostvars['localhost'] | default({})).get('mongodb_password') or lookup('env', 'MONGODB_PASSWORD') | default('') }}"
+        redis_password: "{{ (hostvars['localhost'] | default({})).get('redis_password') or lookup('env', 'REDIS_PASSWORD') | default('') }}"
+        jwt_secret_key: "{{ (hostvars['localhost'] | default({})).get('jwt_secret_key') or lookup('env', 'JWT_SECRET_KEY') | default('') }}"
+        encryption_key: "{{ (hostvars['localhost'] | default({})).get('encryption_key') or lookup('env', 'ENCRYPTION_KEY') | default('') }}"
+        dart_backend_service_key: "{{ (hostvars['localhost'] | default({})).get('dart_backend_service_key') or lookup('env', 'DART_BACKEND_SERVICE_KEY') | default('') }}"
+        dutch_mt_dashboard_service_key: "{{ (hostvars['localhost'] | default({})).get('dutch_mt_dashboard_service_key') or lookup('env', 'DUTCH_MT_DASHBOARD_SERVICE_KEY') | default('') }}"
+        google_client_id: "{{ (hostvars['localhost'] | default({})).get('google_client_id') or lookup('env', 'GOOGLE_CLIENT_ID') | default('') }}"
+        google_client_secret: "{{ (hostvars['localhost'] | default({})).get('google_client_secret') or lookup('env', 'GOOGLE_CLIENT_SECRET') | default('') }}"
+        app_version: "{{ (hostvars['localhost'] | default({})).get('app_version') or lookup('env', 'APP_VERSION') | default('2.0.0') }}"
+        app_download_base_url: "{{ (hostvars['localhost'] | default({})).get('app_download_base_url') or lookup('env', 'APP_DOWNLOAD_BASE_URL') | default('https://dutch.mt/downloads') }}"
+        credit_system_api_key: "{{ (hostvars['localhost'] | default({})).get('credit_system_api_key') or lookup('env', 'CREDIT_SYSTEM_API_KEY') | default('') }}"
+        dutch_wins_per_user_level: "{{ (hostvars['localhost'] | default({})).get('dutch_wins_per_user_level') or lookup('env', 'DUTCH_WINS_PER_USER_LEVEL') | default('10') }}"
+        dutch_levels_per_rank: "{{ (hostvars['localhost'] | default({})).get('dutch_levels_per_rank') or lookup('env', 'DUTCH_LEVELS_PER_RANK') | default('5') }}"
+        dutch_user_level_min: "{{ (hostvars['localhost'] | default({})).get('dutch_user_level_min') or lookup('env', 'DUTCH_USER_LEVEL_MIN') | default('1') }}"
+        dutch_rank_hierarchy: "{{ (hostvars['localhost'] | default({})).get('dutch_rank_hierarchy') or lookup('env', 'DUTCH_RANK_HIERARCHY') | default('beginner,novice,apprentice,skilled,advanced,expert,veteran,master,elite,legend') }}"
+        dutch_tables_json: "{{ (hostvars['localhost'] | default({})).get('dutch_tables_json') or lookup('env', 'DUTCH_TABLES_JSON') | default('') }}"
+        registration_coin_bonus: "{{ (hostvars['localhost'] | default({})).get('registration_coin_bonus') or lookup('env', 'REGISTRATION_COIN_BONUS') | default('500') }}"
+        stripe_secret_key: "{{ (hostvars['localhost'] | default({})).get('stripe_secret_key') or lookup('env', 'STRIPE_SECRET_KEY') | default('') }}"
+        stripe_publishable_key: "{{ (hostvars['localhost'] | default({})).get('stripe_publishable_key') or lookup('env', 'STRIPE_PUBLISHABLE_KEY') | default('') }}"
+        stripe_webhook_secret: "{{ (hostvars['localhost'] | default({})).get('stripe_webhook_secret') or lookup('env', 'STRIPE_WEBHOOK_SECRET') | default('') }}"
+        stripe_price_coin_starter: "{{ (hostvars['localhost'] | default({})).get('stripe_price_coin_starter') or lookup('env', 'STRIPE_PRICE_COIN_STARTER') | default('') }}"
+        stripe_price_coin_casual: "{{ (hostvars['localhost'] | default({})).get('stripe_price_coin_casual') or lookup('env', 'STRIPE_PRICE_COIN_CASUAL') | default('') }}"
+        stripe_price_coin_popular: "{{ (hostvars['localhost'] | default({})).get('stripe_price_coin_popular') or lookup('env', 'STRIPE_PRICE_COIN_POPULAR') | default('') }}"
+        stripe_price_coin_grinder: "{{ (hostvars['localhost'] | default({})).get('stripe_price_coin_grinder') or lookup('env', 'STRIPE_PRICE_COIN_GRINDER') | default('') }}"
+        stripe_price_coin_pro: "{{ (hostvars['localhost'] | default({})).get('stripe_price_coin_pro') or lookup('env', 'STRIPE_PRICE_COIN_PRO') | default('') }}"
+        stripe_coin_checkout_success_url: "{{ (hostvars['localhost'] | default({})).get('stripe_coin_checkout_success_url') or lookup('env', 'STRIPE_COIN_CHECKOUT_SUCCESS_URL') | default('') }}"
+        stripe_coin_checkout_cancel_url: "{{ (hostvars['localhost'] | default({})).get('stripe_coin_checkout_cancel_url') or lookup('env', 'STRIPE_COIN_CHECKOUT_CANCEL_URL') | default('') }}"
+
+    - name: Create application directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ app_dir }}"
+        - "{{ data_dir }}/mongodb"
+        - "{{ data_dir }}/redis"
+        # - "{{ data_dir }}/prometheus/config"
+        # - "{{ data_dir }}/prometheus/storage"
+        # - "{{ data_dir }}/grafana"
+        # - "{{ data_dir }}/grafana/provisioning"
+        # - "{{ data_dir }}/grafana/dashboards"
+
+    # - name: Sync Grafana provisioning configuration (datasources, dashboards providers)
+    #   copy:
+    #     src: "{{ playbook_dir }}/../../python_base_04/grafana/provisioning/"
+    #     dest: "{{ data_dir }}/grafana/provisioning/"
+    #     mode: '0644'
+    #   register: grafana_provisioning_sync
+
+    # - name: Sync Grafana dashboard JSON definitions
+    #   copy:
+    #     src: "{{ playbook_dir }}/../../python_base_04/grafana/dashboards/"
+    #     dest: "{{ data_dir }}/grafana/dashboards/"
+    #     mode: '0644'
+    #   register: grafana_dashboards_sync
+
+    - name: Get VPS app user UID and GID (for Redis/MongoDB container user)
+      shell: "getent passwd {{ vps_user }} | cut -d: -f3,4"
+      register: vps_app_id
+      changed_when: false
+
+    - name: Set VPS app UID/GID facts
+      set_fact:
+        vps_app_uid: "{{ vps_app_id.stdout.split(':')[0] }}"
+        vps_app_gid: "{{ vps_app_id.stdout.split(':')[1] }}"
+      when: vps_app_id.stdout is defined and vps_app_id.stdout != ""
+
+    - name: "Create .env for docker-compose (sensitive values from Ansible vars: vault, group_vars, host_vars, or -e)"
+      template:
+        src: "{{ playbook_dir }}/templates/env.j2"
+        dest: "{{ app_dir }}/.env"
+        mode: '0600'
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+      when: vps_app_uid is defined and vps_app_gid is defined
+
+    - name: Ensure Redis data dir is owned by VPS app user (Redis runs as this UID)
+      file:
+        path: "{{ data_dir }}/redis"
+        state: directory
+        mode: '0755'
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+
+    - name: Ensure profile avatars dir is owned by VPS app user (Flask bind mount; same user as dutch_flask-external)
+      file:
+        path: "{{ data_dir }}/avatars"
+        state: directory
+        mode: '0755'
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+
+    - name: Ensure MongoDB data dir is owned by UID 1001 (Bitnami MongoDB default user)
+      file:
+        path: "{{ data_dir }}/mongodb"
+        state: directory
+        mode: '0755'
+        owner: "1001"
+        group: "1001"
+
+    - name: Recursively fix ownership of Redis data
+      command: "chown -R {{ vps_user }}:{{ vps_user }} {{ data_dir }}/redis"
+      changed_when: true
+
+    - name: Recursively fix ownership of MongoDB data
+      command: "chown -R 1001:1001 {{ data_dir }}/mongodb"
+      changed_when: true
+
+    - name: Copy docker-compose.yml to server
+      copy:
+        src: "{{ playbook_dir }}/../../{{ compose_file }}"
+        dest: "{{ app_dir }}/{{ compose_file }}"
+        mode: '0644'
+        remote_src: false
+
+    - name: Check if mobile_release.json exists
+      stat:
+        path: "{{ data_dir }}/mobile_release.json"
+      register: mobile_release_stat
+
+    - name: Create mobile_release.json only when missing (Flask check-updates reads it; build_apk.sh updates it after uploads)
+      copy:
+        content: '{"latest_version": "0.0.0", "min_supported_version": "0.0.0"}'
+        dest: "{{ data_dir }}/mobile_release.json"
+        mode: '0644'
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+      when: vps_user is defined and not mobile_release_stat.stat.exists
+
+    # - name: Create minimal Prometheus configuration file
+    #   copy:
+    #     content: |
+    #       global:
+    #         scrape_interval: 15s
+    #         evaluation_interval: 15s
+    #
+    #       scrape_configs:
+    #         - job_name: 'flask-app'
+    #           static_configs:
+    #             - targets: ['dutch_flask-external:5001']
+    #           metrics_path: '/metrics'
+    #     dest: "{{ data_dir }}/prometheus/config/prometheus.yml"
+    #     mode: '0644'
+
+    - name: Verify docker-compose.yml was copied
+      stat:
+        path: "{{ app_dir }}/{{ compose_file }}"
+      register: compose_file_stat
+
+    - name: Display docker-compose.yml location
+      debug:
+        msg: |
+          ============================================
+          Docker Compose file deployed successfully!
+          ============================================
+          Location: {{ app_dir }}/{{ compose_file }}
+          
+          To start the services, SSH into the server and run:
+          cd {{ app_dir }}
+          docker compose up -d
+          
+          To view logs:
+          docker compose logs -f
+          
+          To stop services:
+          docker compose down
+          ============================================
+
+    - name: Check if Docker Compose is available
+      shell: sg docker -c "docker compose version"
+      register: docker_compose_check
+      changed_when: false
+      failed_when: false
+
+    - name: Display Docker Compose version
+      debug:
+        msg: "{{ docker_compose_check.stdout }}"
+      when: docker_compose_check.rc is defined and docker_compose_check.rc == 0
+
+    - name: Validate docker-compose.yml syntax
+      shell: sg docker -c "docker compose -f {{ app_dir }}/{{ compose_file }} config"
+      register: compose_validate
+      changed_when: false
+      failed_when: false
+      when: docker_compose_check.rc is defined and docker_compose_check.rc == 0
+
+    - name: Display validation result
+      debug:
+        msg: |
+          Docker Compose file validation:
+          {{ compose_validate.stdout if (compose_validate.rc is defined and compose_validate.rc == 0) else 'Validation failed - check the error above' }}
+      when: compose_validate is defined and compose_validate.rc is defined and compose_validate.rc == 0
+
+    - name: Display warning if validation failed
+      debug:
+        msg: |
+          ⚠ WARNING: Docker Compose file validation failed.
+          Please check the docker-compose.yml file for errors.
+          Error: {{ compose_validate.stderr | default('Unknown error') }}
+      when: compose_validate is defined and compose_validate.rc is defined and compose_validate.rc != 0
+
+    - name: Prompt for interactive docker compose run
+      pause:
+        prompt: |
+          ============================================
+          Ready to start Docker Compose services?
+          ============================================
+          The docker-compose.yml file has been deployed to:
+          {{ app_dir }}/{{ compose_file }}
+          
+          Would you like to start the services now?
+          (This will run: docker compose up -d)
+          
+          Press Enter to continue, or Ctrl+C to cancel.
+          ============================================
+      register: start_prompt
+      when: ansible_check_mode == False
+
+    - name: Pull latest Docker images
+      shell: sg docker -c "cd {{ app_dir }} && docker compose -f {{ compose_file }} pull"
+      register: compose_pull_result
+      when: start_prompt is defined and start_prompt.user_input is defined
+
+    - name: Start Docker Compose services
+      shell: sg docker -c "cd {{ app_dir }} && docker compose -f {{ compose_file }} up -d"
+      register: compose_up_result
+      when: start_prompt is defined and start_prompt.user_input is defined
+
+    - name: Display service startup result
+      debug:
+        msg: "{{ compose_up_result.stdout_lines | default([]) }}"
+      when: compose_up_result is defined and compose_up_result.stdout_lines is defined
+
+    - name: Wait for services to be ready
+      wait_for:
+        host: localhost
+        port: "{{ item.port }}"
+        delay: 5
+        timeout: 30
+      loop:
+        - { port: 5001, name: "Flask App" }
+        - { port: 27018, name: "MongoDB" }
+        - { port: 6380, name: "Redis" }
+      failed_when: false
+      when: compose_up_result is defined and compose_up_result.changed | default(false)
+
+    # - name: Restart Grafana container if provisioning changed
+    #   shell: sg docker -c "cd {{ app_dir }} && docker compose -f {{ compose_file }} restart dutch_grafana"
+    #   when:
+    #     - compose_up_result is defined and compose_up_result.changed | default(false)
+    #     - grafana_provisioning_sync is defined and grafana_provisioning_sync.changed | default(false) or
+    #       grafana_dashboards_sync is defined and grafana_dashboards_sync.changed | default(false)
+
+    - name: Check running containers
+      shell: sg docker -c "cd {{ app_dir }} && docker compose -f {{ compose_file }} ps"
+      register: container_status
+      changed_when: false
+      when: compose_up_result is defined and compose_up_result.changed | default(false)
+
+    - name: Display container status
+      debug:
+        msg: |
+          ============================================
+          Container Status:
+          ============================================
+          {{ container_status.stdout | default('Containers not started') }}
+          ============================================
+      when: container_status is defined
+
+    - name: Display completion message
+      debug:
+        msg: |
+          ============================================
+          ✓ DEPLOYMENT COMPLETE!
+          ============================================
+          Docker Compose file: {{ app_dir }}/{{ compose_file }}
+          
+          Services should be starting up. Check status with:
+          cd {{ app_dir }}
+          docker compose ps
+          docker compose logs -f
+          
+          To stop all services:
+          docker compose down
+          ============================================
+      when: compose_up_result is defined and compose_up_result.changed | default(false)
