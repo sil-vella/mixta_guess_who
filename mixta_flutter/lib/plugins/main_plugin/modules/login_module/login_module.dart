@@ -15,6 +15,78 @@ class LoginModule extends ModuleBase {
     _log.info('✅ LoginModule initialized.');
   }
 
+  /// Same category discovery as [ProgressScreen] so guest sync works when
+  /// `available_categories` was never written.
+  List<String> _resolvedCategories(SharedPrefManager sharedPref) {
+    List<String> list = sharedPref.getStringList('available_categories');
+    if (list.isNotEmpty) return list;
+
+    final keys = sharedPref.getKeys();
+    final inferred = <String>{};
+    for (final key in keys) {
+      if (key.startsWith('max_levels_')) {
+        inferred.add(key.substring('max_levels_'.length));
+      } else if (key.startsWith('level_')) {
+        inferred.add(key.substring('level_'.length));
+      } else if (key.startsWith('points_') && key.contains('_level')) {
+        final category = key.substring('points_'.length, key.indexOf('_level'));
+        if (category.isNotEmpty) inferred.add(category);
+      } else if (key.startsWith('guessed_') && key.contains('_level')) {
+        final rest = key.substring('guessed_'.length);
+        final idx = rest.lastIndexOf('_level');
+        if (idx > 0) inferred.add(rest.substring(0, idx));
+      }
+    }
+    return inferred.toList();
+  }
+
+  Map<String, dynamic> _buildLocalProgressSnapshot(SharedPrefManager sharedPref) {
+    final categories = _resolvedCategories(sharedPref);
+    final Map<String, dynamic> categoryProgress = {};
+    final Map<String, dynamic> guessedNames = {};
+    int totalPoints = 0;
+
+    for (final category in categories) {
+      final maxLevels = sharedPref.getInt('max_levels_$category') ?? 1;
+      final currentLevel = sharedPref.getInt('level_$category') ?? 1;
+
+      int categoryPoints = 0;
+      final Map<String, dynamic> guessedByLevel = {};
+      final Map<String, dynamic> levelPoints = {};
+
+      for (int level = 1; level <= maxLevels; level++) {
+        final points = sharedPref.getInt('points_${category}_level$level') ?? 0;
+        categoryPoints += points;
+
+        final guessed = sharedPref.getStringList('guessed_${category}_level$level');
+        if (guessed.isNotEmpty) {
+          guessedByLevel['level_$level'] = guessed;
+        }
+        if (points > 0 || guessed.isNotEmpty) {
+          levelPoints['$level'] = points;
+        }
+      }
+
+      totalPoints += categoryPoints;
+      categoryProgress[category] = {
+        'level': currentLevel,
+        'points': categoryPoints,
+        'level_points': levelPoints,
+      };
+
+      if (guessedByLevel.isNotEmpty) {
+        guessedNames[category] = guessedByLevel;
+      }
+    }
+
+    return {
+      'category_progress': categoryProgress,
+      'guessed_names': guessedNames,
+      'total_points': totalPoints,
+      'categories_count': categories.length,
+    };
+  }
+
   Future<Map<String, dynamic>> registerUser({
     required BuildContext context,
     required String username,
@@ -45,11 +117,44 @@ class LoginModule extends ModuleBase {
 
         await sharedPref.setString('username', username);
         final rawId = response?['user_id'];
+        int? userId;
         if (rawId != null) {
-          final id = rawId is int ? rawId : int.tryParse('$rawId');
-          if (id != null) {
-            await sharedPref.setInt('user_id', id);
+          userId = rawId is int ? rawId : int.tryParse('$rawId');
+          if (userId != null) {
+            await sharedPref.setInt('user_id', userId);
           }
+        }
+
+        final snapshot = _buildLocalProgressSnapshot(sharedPref);
+        final categoryProgress = snapshot['category_progress'] as Map<String, dynamic>;
+        final guessedNames = snapshot['guessed_names'] as Map<String, dynamic>;
+        final totalPoints = snapshot['total_points'] as int;
+
+        if (categoryProgress.isNotEmpty || guessedNames.isNotEmpty || totalPoints > 0) {
+          final syncPayload = <String, dynamic>{
+            'username': username,
+            if (userId != null) 'user_id': userId,
+            'category_progress': categoryProgress,
+            'guessed_names': guessedNames,
+            'total_points': totalPoints,
+          };
+
+          _log.info(
+            "🔄 Syncing existing local progress after register | categories=${snapshot['categories_count']} | totalPoints=$totalPoints",
+          );
+
+          try {
+            final syncResp = await connectionModule.sendPostRequest('/sync-progress', syncPayload);
+            _log.info("✅ /sync-progress response: $syncResp");
+          } catch (e, st) {
+            _log.error(
+              "❌ Failed to sync local progress after register.",
+              error: e,
+              stackTrace: st,
+            );
+          }
+        } else {
+          _log.info("ℹ️ No local progress snapshot to sync after registration.");
         }
 
         return {"success": "Username is available."};

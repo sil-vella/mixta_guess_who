@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
@@ -215,43 +216,21 @@ class GameScreenState extends BaseScreenState<GameScreen> {
         barrierDismissible: false,
         builder: (dialogContext) {
           final bool completedCategory = isEndGame;
-          final String title = completedCategory ? 'Category complete' : 'Level up';
-          final String body = completedCategory
-              ? 'You finished every level in this category. Pick another category or play again from preferences.'
-              : 'You guessed everyone on this level. Continue to load the next level.';
-
-          return AlertDialog(
-            backgroundColor: AppColors.primaryColor,
-            title: Text(title, style: AppTextStyles.headingMedium()),
-            content: SingleChildScrollView(
-              child: Text(body, style: AppTextStyles.bodyLarge),
-            ),
-            actions: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentColor,
-                  foregroundColor: AppColors.white,
-                  padding: AppPadding.cardPadding,
-                ),
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                  _stateManager.updatePluginState("game_round", {
-                    "levelUp": false,
-                    "endGame": false,
-                  }, force: true);
-                  if (completedCategory) {
-                    Navigator.pushReplacementNamed(context, "/preferences");
-                  } else {
-                    _loadLevelAndPoints();
-                    _startRoundFromScratch(traceId);
-                  }
-                },
-                child: Text(
-                  completedCategory ? 'Back to profile' : 'Continue',
-                  style: AppTextStyles.buttonText,
-                ),
-              ),
-            ],
+          return _LevelProgressDialog(
+            completedCategory: completedCategory,
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _stateManager.updatePluginState("game_round", {
+                "levelUp": false,
+                "endGame": false,
+              }, force: true);
+              if (completedCategory) {
+                Navigator.pushReplacementNamed(context, "/preferences");
+              } else {
+                _loadLevelAndPoints();
+                _startRoundFromScratch(traceId);
+              }
+            },
           );
         },
       );
@@ -517,4 +496,131 @@ class GameScreenState extends BaseScreenState<GameScreen> {
   }
 
 
+}
+
+class _LevelProgressDialog extends StatefulWidget {
+  final bool completedCategory;
+  final VoidCallback onPressed;
+
+  const _LevelProgressDialog({
+    required this.completedCategory,
+    required this.onPressed,
+  });
+
+  @override
+  State<_LevelProgressDialog> createState() => _LevelProgressDialogState();
+}
+
+class _LevelProgressDialogState extends State<_LevelProgressDialog>
+    with SingleTickerProviderStateMixin {
+  late final ConfettiController _confettiController;
+  late final AnimationController _scaleController;
+  late final Animation<double> _scaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _scaleAnim = CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack);
+    _scaleController.forward();
+    _confettiController.play();
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    _scaleController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.completedCategory ? "🏆 Category Complete!" : "🎉 Level Up!";
+    final body = widget.completedCategory
+        ? "You finished every level in this category. Pick another category to keep playing."
+        : "You guessed everyone on this level. Ready for the next challenge?";
+    final button = widget.completedCategory ? "Back to profile" : "Continue";
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ScaleTransition(
+            scale: _scaleAnim,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.accentColor.withOpacity(0.4), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.completedCategory ? Icons.emoji_events : Icons.auto_awesome,
+                    size: 62,
+                    color: AppColors.accentColor,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    style: AppTextStyles.headingMedium(),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    body,
+                    style: AppTextStyles.bodyLarge,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 18),
+                  ElevatedButton(
+                    onPressed: widget.onPressed,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentColor,
+                      foregroundColor: AppColors.white,
+                      padding: AppPadding.cardPadding,
+                    ),
+                    child: Text(button, style: AppTextStyles.buttonText),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirectionality: BlastDirectionality.explosive,
+                emissionFrequency: 0.08,
+                numberOfParticles: 20,
+                maxBlastForce: 16,
+                minBlastForce: 8,
+                gravity: 0.18,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

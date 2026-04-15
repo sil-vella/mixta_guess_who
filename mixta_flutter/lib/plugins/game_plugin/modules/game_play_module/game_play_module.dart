@@ -110,8 +110,30 @@ class GamePlayModule extends ModuleBase {
 
       if (response.containsKey("error")) {
         roundLevel = null;
-        if (response["error"].contains("No more actors left")) {
-          _log.info("🏆 All celebrities have been guessed! Consider resetting.");
+        final errText = "${response["error"]}";
+        final noMoreNames = errText.toLowerCase().contains("no more names left to guess");
+
+        if (noMoreNames) {
+          final int maxLevels = sharedPref.getInt('max_levels_$category') ?? level;
+          if (level < maxLevels) {
+            final nextLevel = level + 1;
+            await sharedPref.setInt('level_$category', nextLevel);
+            _log.info(
+              "🏁 Level $level completed for '$category' via no-more-names response. Promoting to level $nextLevel/$maxLevels.",
+            );
+            stateManager.updatePluginState("game_round", {"levelUp": true}, force: true);
+            isLoading = false;
+            feedbackMessage = "";
+            updateState();
+          } else {
+            _log.info(
+              "🏆 Category '$category' fully completed (level $level/$maxLevels). Triggering endGame.",
+            );
+            stateManager.updatePluginState("game_round", {"endGame": true}, force: true);
+            isLoading = false;
+            feedbackMessage = "";
+            updateState();
+          }
         } else {
           _finishRoundLoadWithError(updateState, "❌ Error fetching question: ${response['error']}");
         }

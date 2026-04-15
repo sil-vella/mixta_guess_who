@@ -96,31 +96,34 @@ class RewardsModule:
         level = data.get("level")
         new_points = data.get("points")
         guessed_names = data.get("guessed_names", [])  # ✅ Updated guessed list
-        username = data.get("username")
-        total_points = data.get("total_points")  # ✅ Get total points from frontend
+        username_raw = data.get("username")
+        username = (username_raw or "").strip() or None
+        client_total_points = data.get("total_points")  # Optional client hint; server recalculates authoritative value
 
+        try:
+            level = int(level)
+            new_points = int(new_points)
+        except (TypeError, ValueError):
+            custom_log(f"❌ [update_rewards] Invalid level/points payload | level={level!r} | points={new_points!r}")
+            return jsonify({"error": "Invalid level or points"}), 400
+
+        if not category:
+            custom_log("❌ [update_rewards] Missing or empty 'category'.")
+            return jsonify({"error": "Category is required"}), 400
+
+        custom_log(
+            f"📜 [update_rewards] category={category} level={level} points={new_points} "
+            f"mode={'registered' if username else 'guest'} username={username!r}"
+        )
         custom_log(f"📜 Updated guessed names received: {guessed_names}")
 
-        if not username:
-            custom_log("❌ [update_rewards] Missing 'username' field in request.")
-            return jsonify({"error": "Username is required"}), 400
-
-        # ✅ Fetch user_id using username
-        user_query = "SELECT id FROM users WHERE username = %s;"
-        user_data = self.connection_module.fetch_from_db(user_query, (username,), as_dict=True)
-
-        if not user_data:
-            custom_log(f"❌ No user found for username: {username}")
-            return jsonify({"error": "User not found"}), 404
-
-        user_id = user_data[0]["id"]
-
-        # ✅ Fetch all available names for this level from YAML
+        # ✅ Fetch all available names for this level from YAML (shared by guest + registered)
         all_names_at_level = self._get_names_from_yaml(category, level)
         custom_log(f"📜 Total names to guess for '{category}' Level {level}: {all_names_at_level}")
 
-        # ✅ Find missing names
-        missing_names = set(all_names_at_level) - set(guessed_names)
+        # ✅ Find missing names (YAML names are lowercased; normalize client list for comparison)
+        guessed_set = {str(n).lower() for n in (guessed_names or []) if n is not None and str(n).strip()}
+        missing_names = set(all_names_at_level) - guessed_set
         custom_log(f"🔍 Missing names to guess: {missing_names}")
 
         # ✅ Get FunctionHelperModule
@@ -136,6 +139,43 @@ class RewardsModule:
         category_data = function_helper_module._load_categories_data()
         max_level = int(category_data.get(category, {}).get("levels", 1))
         custom_log(f"📊 Loaded category data for '{category}' | Max Level: {max_level}")
+
+        # ✅ Determine level_up / end_game (same rules for guest and registered)
+        level_up = False
+        end_game = False
+        if all_names_at_level and not missing_names:
+            if level < max_level:
+                level_up = True
+                custom_log(f"🎯 All names guessed — level up to {level + 1}")
+            else:
+                end_game = True
+                custom_log(f"🏆 Max level reached in {category}. End game.")
+
+        # ✅ Guest / anonymous: no DB writes; return flags so the client can progress locally
+        if not username:
+            guest_total = 0
+            try:
+                guest_total = int(client_total_points) if client_total_points is not None else 0
+            except (TypeError, ValueError):
+                guest_total = 0
+            response = {
+                "message": "Rewards acknowledged (guest)",
+                "levelUp": level_up,
+                "endGame": end_game,
+                "total_points": guest_total,
+            }
+            custom_log(f"✅ [update_rewards] Guest response (no DB): {response}")
+            return jsonify(response), 200
+
+        # ✅ Fetch user_id using username
+        user_query = "SELECT id FROM users WHERE username = %s;"
+        user_data = self.connection_module.fetch_from_db(user_query, (username,), as_dict=True)
+
+        if not user_data:
+            custom_log(f"❌ No user found for username: {username}")
+            return jsonify({"error": "User not found"}), 404
+
+        user_id = user_data[0]["id"]
 
         # ✅ Fetch current progress
         progress_query = """
@@ -170,33 +210,31 @@ class RewardsModule:
                 self.connection_module.execute_query(insert_query, (user_id, category, level, guessed_name))
                 custom_log(f"✅ Added guessed name '{guessed_name}' for user {user_id} in {category} Level {level}.")
 
-        # ✅ Update user's total points in the `users` table
-        if total_points is not None:
-            custom_log(f"🔄 Updating total points for user {user_id}: {total_points}")
+        # ✅ Update user's total points in `users` using authoritative DB sum (not frontend value)
+        if client_total_points is not None:
+            custom_log(
+                f"ℹ️ [update_rewards] Client total_points hint received: {client_total_points} (server will recompute)"
+            )
 
-            update_total_points_query = """
-            UPDATE users SET total_points = %s WHERE id = %s
-            """
-            self.connection_module.execute_query(update_total_points_query, (total_points, user_id))
+        total_query = """
+        SELECT COALESCE(SUM(points), 0) AS total_points
+        FROM user_category_progress
+        WHERE user_id = %s
+        """
+        total_data = self.connection_module.fetch_from_db(total_query, (user_id,), as_dict=True) or []
+        db_total_points = int(total_data[0]["total_points"]) if total_data else 0
 
-            custom_log(f"✅ Total points updated for user {user_id}: {total_points}")
-
-        # ✅ Determine if we should level up or end the game
-        level_up = False
-        end_game = False
-
-        if not missing_names:  # ✅ Level up only if all names are guessed
-            if level < max_level:
-                level_up = True
-                custom_log(f"🎯 User has guessed all names! Leveling up to Level {level + 1}")
-            else:
-                end_game = True
-                custom_log(f"🏆 User reached max level in {category}. Game Over.")
+        update_total_points_query = """
+        UPDATE users SET total_points = %s WHERE id = %s
+        """
+        self.connection_module.execute_query(update_total_points_query, (db_total_points, user_id))
+        custom_log(f"✅ Total points updated for user {user_id}: {db_total_points} (db sum)")
 
         response = {
             "message": "Rewards updated successfully",
             "levelUp": level_up,
-            "endGame": end_game
+            "endGame": end_game,
+            "total_points": db_total_points,
         }
 
         custom_log(f"✅ [update_rewards] Response Sent: {response}")

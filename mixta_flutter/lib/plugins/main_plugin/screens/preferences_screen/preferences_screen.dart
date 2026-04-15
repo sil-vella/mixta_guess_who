@@ -31,7 +31,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
   LoginModule? _loginModule;
 
   String? _username;
-  String? _selectedCategory = "actors"; // Stores the selected category
   bool _deletingData = false;
 
   @override
@@ -52,20 +51,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
     }
 
     _checkLoginStatus();
-    _loadSelectedCategory();
-  }
-
-  /// ✅ Fetch stored category selection from SharedPreferences
-  Future<void> _loadSelectedCategory() async {
-    if (_sharedPref == null) return;
-
-    final savedCategory = _sharedPref!.getString('category') ?? "actors";
-
-    setState(() {
-      _selectedCategory = savedCategory;
-    });
-
-    logger.info("📊 Loaded selected category: $_selectedCategory");
   }
 
   Future<void> _checkLoginStatus() async {
@@ -138,7 +123,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
         }
 
         await _checkLoginStatus();
-        await _loadSelectedCategory();
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,7 +134,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
       } else if (_sharedPref != null) {
         await _sharedPref!.clear();
         await _checkLoginStatus();
-        await _loadSelectedCategory();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Local data cleared.'), backgroundColor: Colors.green),
@@ -162,78 +145,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
         setState(() => _deletingData = false);
       }
     }
-  }
-
-  /// ✅ Handle category selection & update SharedPreferences
-  Future<void> _updateCategory(String category) async {
-    if (_sharedPref == null) return;
-
-    await _sharedPref!.setString('category', category);
-
-    setState(() {
-      _selectedCategory = category;
-    });
-
-    logger.info("✅ Selected Category Updated: $category");
-    if (mounted) {
-      Navigator.pop(context); // Close modal after selection
-    }
-  }
-
-  /// ✅ UI for showing category selection modal
-  void _showCategorySelector() async {
-    if (_sharedPref == null) return;
-
-    // ✅ Fetch categories from SharedPreferences
-    List<String> categories = _sharedPref!.getStringList('available_categories');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16.0),
-          height: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Select Category",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Divider(),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    final formattedCategory = _formatCategory(category);
-                    return ListTile(
-                      title: Text(formattedCategory),
-                      trailing: _selectedCategory == category
-                          ? const Icon(Icons.check, color: Colors.green)
-                          : null,
-                      onTap: () => _updateCategory(category),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// ✅ Helper function to format category names
-  String _formatCategory(String category) {
-    return category.replaceAll("_", " ").splitMapJoin(
-      RegExp(r'(\w+)'),
-      onMatch: (m) => m[0]![0].toUpperCase() + m[0]!.substring(1).toLowerCase(),
-    );
   }
 
   /// ✅ Handle user registration
@@ -263,31 +174,7 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
   /// ✅ Show the Profile OR Register Form based on username existence
   @override
   Widget buildContent(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TabBar(
-            labelColor: AppColors.accentColor,
-            unselectedLabelColor: AppColors.lightGray,
-            indicatorColor: AppColors.accentColor,
-            tabs: const [
-              Tab(text: 'Profile'),
-              Tab(text: 'Data'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _buildProfileTab(context),
-                _buildDataTab(context),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return _buildProfileTab(context);
   }
 
   Widget _buildProfileTab(BuildContext context) {
@@ -297,15 +184,6 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: _showCategorySelector,
-              icon: const Icon(Icons.category, color: AppColors.accentColor),
-              label: Text(
-                "Selected Category: ${_formatCategory(_selectedCategory!)}",
-                style: AppTextStyles.buttonText,
-              ),
-            ),
             const SizedBox(height: 20),
             _username != null && _username!.isNotEmpty
                 ? _buildUserSection()
@@ -321,56 +199,52 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
                 child: const Text("View Your Progress"),
               ),
             ),
+            const SizedBox(height: 24),
+            _buildDeleteDataSection(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDataTab(BuildContext context) {
-    return Padding(
-      padding: AppPadding.defaultPadding,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              'Delete my data',
-              style: AppTextStyles.headingMedium(color: AppColors.accentColor),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _username != null && _username!.isNotEmpty
-                  ? 'Remove your account from the server (progress, guessed names, points) and erase all data stored on this device.'
-                  : 'You have not registered a username. You can still clear all game data stored on this device.',
-              style: AppTextStyles.bodyLarge,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _deletingData ? null : _confirmAndDeleteMyData,
-                icon: _deletingData
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.delete_forever_outlined, color: AppColors.redAccent),
-                label: Text(
-                  _deletingData ? 'Working…' : 'Delete my data',
-                  style: AppTextStyles.buttonText.copyWith(color: AppColors.redAccent),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.redAccent),
-                  padding: AppPadding.cardPadding,
-                ),
-              ),
-            ),
-          ],
+  Widget _buildDeleteDataSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Delete my data',
+          style: AppTextStyles.headingMedium(color: AppColors.accentColor),
         ),
-      ),
+        const SizedBox(height: 12),
+        Text(
+          _username != null && _username!.isNotEmpty
+              ? 'Remove your account from the server (progress, guessed names, points) and erase all data stored on this device.'
+              : 'You have not registered a username. You can still clear all game data stored on this device.',
+          style: AppTextStyles.bodyLarge,
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _deletingData ? null : _confirmAndDeleteMyData,
+            icon: _deletingData
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_forever_outlined, color: AppColors.redAccent),
+            label: Text(
+              _deletingData ? 'Working…' : 'Delete my data',
+              style: AppTextStyles.buttonText.copyWith(color: AppColors.redAccent),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.redAccent),
+              padding: AppPadding.cardPadding,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

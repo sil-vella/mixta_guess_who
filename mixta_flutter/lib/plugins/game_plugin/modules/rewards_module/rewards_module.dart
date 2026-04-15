@@ -64,7 +64,7 @@ class RewardsModule extends ModuleBase {
 
     // ✅ Fetch guessed names for this level
     String guessedKey = "guessed_${category}_level$currentLevel";
-    List<String> guessedList = sharedPref.getStringList(guessedKey) ?? [];
+    List<String> guessedList = sharedPref.getStringList(guessedKey);
 
     if (!guessedList.contains(guessedActor)) {
       guessedList.add(guessedActor);
@@ -75,20 +75,28 @@ class RewardsModule extends ModuleBase {
     // ✅ Retrieve user details
     final userId = sharedPref.getInt('user_id');
     final username = sharedPref.getString('username');
-    final email = sharedPref.getString('email');
+    final trimmedUsername = (username ?? '').trim();
+    final bool isRegistered = trimmedUsername.isNotEmpty;
 
     sharedPref.setInt('points_${category}_level$currentLevel', updatedPoints);
     int totalPoints = await functionsHelper.getTotalPoints(context); // ✅ Get updated total
 
-    // ✅ Backend request to update rewards
+    _log.info(
+      '[saveReward] progression | registered=$isRegistered user_id=$userId '
+      'username=${trimmedUsername.isEmpty ? "(guest)" : trimmedUsername} '
+      'category=$category level=$currentLevel points=$updatedPoints '
+      'guessedCount=${guessedList.length} totalPoints=$totalPoints',
+    );
+
+    // ✅ Backend request to update rewards (guest: server returns flags only, no DB)
     Map<String, dynamic> response = {};
     try {
-      _log.info("⚡ Sending updated rewards to backend...");
+      _log.info('⚡ Sending updated rewards to backend (/update-rewards)...');
 
       response = await connectionModule.sendPostRequest(
         "/update-rewards",
         {
-          "username": username,
+          "username": trimmedUsername.isEmpty ? null : trimmedUsername,
           "category": category,
           "level": currentLevel,
           "points": updatedPoints,
@@ -97,22 +105,25 @@ class RewardsModule extends ModuleBase {
         },
       );
 
-      _log.info("📜 Response from backend: $response");
+      _log.info('📜 [saveReward] backend response: $response');
 
-      if (response.isEmpty || !response.containsKey("message")) {
-        _log.error("❌ Invalid response from backend.");
-      }
-
-      if (response["message"] != "Rewards updated successfully") {
-        _log.error("❌ Backend error: ${response["error"] ?? "Unknown error"}");
+      final msg = response['message']?.toString();
+      final okMessage = msg == 'Rewards updated successfully' || msg == 'Rewards acknowledged (guest)';
+      final hasError = response['error'] != null;
+      if (response.isEmpty || hasError || (!okMessage && (response['levelUp'] == null && response['endGame'] == null))) {
+        _log.error(
+          '❌ [saveReward] invalid or error response | error=${response['error']} message=$msg',
+        );
+      } else if (!okMessage) {
+        _log.log('⚠️ [saveReward] unexpected message but level flags present: message=$msg', level: 900);
       }
     } catch (e) {
-      _log.error("❌ Error while updating rewards: $e", error: e);
+      _log.error('❌ [saveReward] request failed: $e', error: e);
     }
 
     // ✅ Update SharedPreferences based on backend response
-    bool levelUp = response["levelUp"] ?? false;
-    bool endGame = response["endGame"] ?? false;
+    bool levelUp = response['levelUp'] == true;
+    bool endGame = response['endGame'] == true;
     int newLevel = levelUp ? currentLevel + 1 : currentLevel;
 
     sharedPref.setInt('level_$category', newLevel);

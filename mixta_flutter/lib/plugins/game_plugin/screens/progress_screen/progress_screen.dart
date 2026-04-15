@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/00_base/screen_base.dart';
 import '../../../../core/managers/services_manager.dart';
-import '../../../../core/managers/module_manager.dart';
 import '../../../../core/services/shared_preferences.dart';
 import '../../../../tools/logging/logger.dart';
 import '../../../../utils/consts/theme_consts.dart';
-import '../../modules/function_helper_module/function_helper_module.dart';
 
 class ProgressScreen extends BaseScreen {
   const ProgressScreen({Key? key}) : super(key: key);
@@ -24,13 +23,12 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
   final Logger logger = Logger();
 
   late ServicesManager _servicesManager;
-  late ModuleManager _moduleManager;
-  FunctionHelperModule? _functionHelperModule;
   SharedPrefManager? _sharedPref;
 
   Map<String, dynamic> _categories = {};
   int _totalPoints = 0;
   bool _isLoading = true;
+  bool _isGuest = true;
 
   @override
   void initState() {
@@ -39,25 +37,53 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
 
     // ✅ Retrieve managers using Provider
     _servicesManager = Provider.of<ServicesManager>(context, listen: false);
-    _moduleManager = Provider.of<ModuleManager>(context, listen: false);
 
-    // ✅ Retrieve modules and services
-    _functionHelperModule = _moduleManager.getLatestModule<FunctionHelperModule>();
+    // ✅ Retrieve services
     _sharedPref = _servicesManager.getService<SharedPrefManager>('shared_pref');
 
     if (_sharedPref == null) {
       logger.error('❌ SharedPreferences service not available.');
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _isGuest = true;
+      });
       return;
     }
 
     _fetchCategories();
   }
 
+  bool _computeIsGuest() {
+    final u = _sharedPref?.getString('username');
+    return u == null || u.trim().isEmpty;
+  }
+
   Future<void> _fetchCategories() async {
     if (_sharedPref == null) return;
 
     List<String> cachedCategories = _sharedPref!.getStringList('available_categories');
+    if (cachedCategories.isEmpty) {
+      final keys = _sharedPref!.getKeys();
+      final inferred = <String>{};
+      for (final key in keys) {
+        if (key.startsWith('max_levels_')) {
+          inferred.add(key.substring('max_levels_'.length));
+        } else if (key.startsWith('level_')) {
+          inferred.add(key.substring('level_'.length));
+        } else if (key.startsWith('points_') && key.contains('_level')) {
+          final category = key.substring('points_'.length, key.indexOf('_level'));
+          if (category.isNotEmpty) inferred.add(category);
+        } else if (key.startsWith('guessed_') && key.contains('_level')) {
+          final rest = key.substring('guessed_'.length);
+          final idx = rest.lastIndexOf('_level');
+          if (idx > 0) inferred.add(rest.substring(0, idx));
+        }
+      }
+      if (inferred.isNotEmpty) {
+        cachedCategories = inferred.toList();
+        logger.info('📜 Inferred categories from SharedPreferences keys: $cachedCategories');
+      }
+    }
 
     if (cachedCategories.isNotEmpty) {
       logger.info('📜 Loaded categories from SharedPreferences: $cachedCategories');
@@ -88,19 +114,37 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
         logger.info("📊 Category: $category -> Level: $currentLevel, Points: $categoryPoints, Guessed: $guessedNamesCount");
       }
 
-      int totalPoints = await _functionHelperModule?.getTotalPoints(context) ?? 0;
+      final int totalPoints = categoryData.values.fold<int>(
+        0,
+            (sum, item) => sum + ((item["points"] as int?) ?? 0),
+      );
 
       setState(() {
         _categories = categoryData;
         _totalPoints = totalPoints;
         _isLoading = false;
+        _isGuest = _computeIsGuest();
       });
 
       return;
     }
 
     logger.error('⚠️ No categories found in SharedPreferences.');
-    setState(() => _isLoading = false);
+    if (mounted) {
+      // Categories may be set a moment later by game plugin initialization; retry once.
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        if (!mounted || _sharedPref == null) return;
+        final retryCategories = _sharedPref!.getStringList('available_categories');
+        if (retryCategories.isNotEmpty) {
+          await _fetchCategories();
+        } else {
+          setState(() {
+            _isLoading = false;
+            _isGuest = _computeIsGuest();
+          });
+        }
+      });
+    }
   }
 
   /// ✅ Format category name (Replace `_` with space & capitalize first letter)
@@ -108,6 +152,47 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
     return category.replaceAll("_", " ").splitMapJoin(
       RegExp(r'(\w+)'),
       onMatch: (m) => m[0]![0].toUpperCase() + m[0]!.substring(1).toLowerCase(),
+    );
+  }
+
+  /// Call-to-action for guests: leaderboard requires a registered username.
+  Widget _buildGuestLeaderboardHint() {
+    if (_isLoading || !_isGuest) return const SizedBox.shrink();
+
+    return Padding(
+      padding: AppPadding.defaultPadding,
+      child: Card(
+        color: AppColors.primaryColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: AppPadding.cardPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Leaderboard',
+                style: AppTextStyles.headingSmall(color: AppColors.white),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create a username in Preferences to save your progress to the server and appear on the leaderboard.',
+                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.white),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => context.go('/preferences'),
+                  child: Text(
+                    'Go to Preferences',
+                    style: AppTextStyles.bodyMedium.copyWith(color: AppColors.accentColor),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -198,6 +283,7 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
       body: Column(
         children: [
           _buildTotalPointsCard(),
+          _buildGuestLeaderboardHint(),
           _buildCategoryProgress(),
         ],
       ),

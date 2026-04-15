@@ -1,5 +1,6 @@
 import 'package:mixta_guess_who/plugins/main_plugin/modules/connections_module/connections_module.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/00_base/module_base.dart';
 import '../../../../core/managers/module_manager.dart';
@@ -71,6 +72,7 @@ class LeaderboardModule extends ModuleBase {
   /// ✅ **User Rank Card (Styled)**
   Widget buildUserRankCard(Map<String, dynamic>? userRank) {
     if (userRank == null) return const SizedBox.shrink();
+    final rank = userRank["user_rank"] ?? userRank["rank"] ?? "-";
 
     return Card(
       color: AppColors.primaryColor, // ✅ Consistent dark theme
@@ -87,7 +89,7 @@ class LeaderboardModule extends ModuleBase {
             ),
             const SizedBox(height: 8),
             Text(
-              "#${userRank["rank"]} - ${userRank["username"]}",
+              "#$rank - ${userRank["username"]}",
               style: AppTextStyles.bodyLarge,
             ),
             Text(
@@ -108,6 +110,7 @@ class LeaderboardModule extends ModuleBase {
         padding: AppPadding.defaultPadding,
         itemBuilder: (context, index) {
           final user = leaderboard[index];
+          final rank = user["user_rank"] ?? user["rank"] ?? "-";
 
           return Card(
             color: (currentUsername != null && user["username"] == currentUsername)
@@ -120,7 +123,7 @@ class LeaderboardModule extends ModuleBase {
               leading: CircleAvatar(
                 backgroundColor: AppColors.accentColor,
                 child: Text(
-                  "${user["rank"]}", // ✅ Use the rank from the API
+                  "$rank", // ✅ Prefer backend `user_rank`, fallback to `rank`
                   style: AppTextStyles.bodyMedium,
                 ),
 
@@ -140,8 +143,54 @@ class LeaderboardModule extends ModuleBase {
     );
   }
 
+  Widget buildNoAccountNotice(BuildContext context) {
+    return Card(
+      color: AppColors.primaryColor,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: AppPadding.defaultPadding,
+      child: Padding(
+        padding: AppPadding.cardPadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Create a username to save rank",
+              style: AppTextStyles.headingSmall(color: AppColors.accentColor),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "You are viewing the global leaderboard as a guest. Create a username in Preferences so your rank is tracked.",
+              style: AppTextStyles.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: () => context.go("/preferences"),
+                icon: const Icon(Icons.person_add_alt_1, color: AppColors.accentColor),
+                label: Text(
+                  "Go to Preferences",
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.accentColor),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.accentColor),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// ✅ **Leaderboard Screen Widget**
   Widget buildLeaderboardWidget(BuildContext context) {
+    final servicesManager = Provider.of<ServicesManager>(context, listen: false);
+    final sharedPref = servicesManager.getService<SharedPrefManager>('shared_pref');
+    final username = sharedPref?.getString('username');
+    final hasAccount = username != null && username.isNotEmpty;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBackgroundColor, // ✅ Ensure solid background
       body: FutureBuilder<Map<String, dynamic>>(
@@ -163,6 +212,7 @@ class LeaderboardModule extends ModuleBase {
 
           return Column(
             children: [
+              if (!hasAccount) buildNoAccountNotice(context),
               buildUserRankCard(userRank),
               buildLeaderboardList(leaderboard, currentUsername),
             ],
