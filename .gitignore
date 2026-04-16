@@ -45,6 +45,11 @@ cdp-output/
 # Backups & snapshots (everything under these dirs + common backup suffixes)
 **/backup/
 **/backups/
+# ROP01 local dumps (multi‑GB archives; must never be in git history going forward)
+playbooks/rop01/backup/
+
+# Local Postgres data dir (if created under mixta_flask — never commit)
+mixta_flask/db_data/
 **/*.bak
 *.backup
 *.old
