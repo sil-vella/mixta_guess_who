@@ -12,7 +12,6 @@ import '../../../../core/services/shared_preferences.dart';
 import '../../../../core/services/ticker_timer/ticker_timer.dart';
 import '../../../../tools/logging/logger.dart';
 import '../../../../utils/consts/theme_consts.dart';
-import '../../../adverts_plugin/modules/admobs/rewarded/rewarded_ad.dart';
 import '../../../main_plugin/modules/main_helper_module/main_helper_module.dart';
 import '../../modules/game_play_module/config/gameplaymodule_config.dart';
 import '../../modules/game_play_module/game_play_module.dart';
@@ -42,8 +41,6 @@ class GameScreenState extends BaseScreenState<GameScreen> {
   late final SharedPrefManager? _sharedPref;
   late final StateManager _stateManager;
   late final GamePlayModule? _gamePlayModule;
-  late final MainHelperModule? _mainHelperModule;
-  late final RewardedAdModule? _rewardedAdModule;
   late final TickerTimer? _roundTimer;
 
   bool _showFeedback = false;
@@ -70,12 +67,10 @@ class GameScreenState extends BaseScreenState<GameScreen> {
 
     _sharedPref = _servicesManager.getService<SharedPrefManager>('shared_pref');
     _gamePlayModule = _moduleManager.getLatestModule<GamePlayModule>();
-    _mainHelperModule = _moduleManager.getLatestModule<MainHelperModule>();
-    _rewardedAdModule = _moduleManager.getLatestModule<RewardedAdModule>();
 
     // ✅ Ensure `round_timer` is only registered if it doesn't exist
     _roundTimer = _servicesManager.getService<TickerTimer>('round_timer');
-    _log.info("🎯 initState services/modules loaded | hasSharedPref=${_sharedPref != null} | hasGamePlayModule=${_gamePlayModule != null} | hasMainHelper=${_mainHelperModule != null} | hasRewardedAd=${_rewardedAdModule != null} | hasRoundTimer=${_roundTimer != null}");
+    _log.info("🎯 initState services/modules loaded | hasSharedPref=${_sharedPref != null} | hasGamePlayModule=${_gamePlayModule != null} | hasRoundTimer=${_roundTimer != null}");
 
     if (_roundTimer == null) {
       _log.info("🧩 round_timer missing; registering new TickerTimer service...");
@@ -112,6 +107,28 @@ class GameScreenState extends BaseScreenState<GameScreen> {
       return !(gameRoundState["imagesLoaded"] == true && gameRoundState["factLoaded"] == true);
     });
   }
+
+  /// Resume round timer after help (same timing as the old post-ad-dismiss path).
+  void _resumeRoundTimerAfterHelp(TickerTimer? roundTimer) {
+    _log.info("✅ Help flow finished. Attempting to resume timer...");
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      if (roundTimer == null) {
+        _log.error("❌ roundTimer instance is null after help!");
+        return;
+      }
+      _log.info(
+          "🔍 roundTimer instance exists. isPaused: ${roundTimer.isPaused}, isRunning: ${roundTimer.isRunning}");
+
+      if (roundTimer.isPaused) {
+        _log.info("▶ Resuming timer after help...");
+        roundTimer.startTimer();
+      } else {
+        _log.error("❌ roundTimer is NOT paused. Cannot resume.");
+      }
+    });
+  }
+
   void _useHelp() {
     _log.info("⏳ Entering _useHelp...");
 
@@ -122,45 +139,19 @@ class GameScreenState extends BaseScreenState<GameScreen> {
 
     _helpUsed = true; // ✅ Mark help as used
 
-    TickerTimer? roundTimer = _servicesManager.getService<TickerTimer>('round_timer');
+    final TickerTimer? roundTimer = _servicesManager.getService<TickerTimer>('round_timer');
 
-    if (_rewardedAdModule != null && _mainHelperModule != null) {
-      if (roundTimer != null && roundTimer.isRunning) {
-        _log.info("⏸ Pausing timer before showing ad.");
-        roundTimer.pauseTimer();
-      }
-
-      _stateManager.updatePluginState("game_round", {
-        "hint": true,
-      });
-
-      _rewardedAdModule!.showAd(
-        context,
-        onUserEarnedReward: _fadeOutIncorrectImage,
-        onAdDismissed: () {
-          _log.info("✅ Ad dismissed! Attempting to resume timer...");
-
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (roundTimer == null) {
-              _log.error("❌ roundTimer instance is null after ad dismissal!");
-            } else {
-              _log.info("🔍 roundTimer instance exists. isPaused: ${roundTimer.isPaused}, isRunning: ${roundTimer.isRunning}");
-
-              if (roundTimer.isPaused) {
-                _log.info("▶ Resuming timer after ad...");
-                roundTimer.startTimer();
-              } else {
-                _log.error("❌ roundTimer is NOT paused. Cannot resume.");
-              }
-            }
-          });
-        },
-      );
-
-      _log.info("🎬 Ad is being shown...");
-    } else {
-      _log.error("❌ RewardedAdModule or MainHelperModule not found!");
+    if (roundTimer != null && roundTimer.isRunning) {
+      _log.info("⏸ Pausing timer before help.");
+      roundTimer.pauseTimer();
     }
+    _stateManager.updatePluginState("game_round", {
+      "hint": true,
+    });
+
+    _log.info("💡 Applying help (hint + fade) — rewarded ad path skipped.");
+    _fadeOutIncorrectImage();
+    _resumeRoundTimerAfterHelp(roundTimer);
   }
 
   void _fadeOutIncorrectImage() {

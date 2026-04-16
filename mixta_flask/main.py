@@ -20,5 +20,5 @@ app_manager.initialize(app)
 app.config["DEBUG"] = True
 
 if __name__ == "__main__":
-    port = int(os.environ.get("FLASK_PORT", "5000"))
+    port = int(os.environ.get("FLASK_PORT", "5002"))
     app.run(debug=True, host="0.0.0.0", port=port)

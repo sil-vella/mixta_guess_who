@@ -1,0 +1,24 @@
+# Local / dev artifacts
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+db_data/
+.env
+.env.local
+.env.prod
+
+# Vendored tooling (installed via requirements.txt in image)
+libs/
+
+# IDE / OS
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+
+# Logs (runtime can write elsewhere)
+tools/logger/*.log

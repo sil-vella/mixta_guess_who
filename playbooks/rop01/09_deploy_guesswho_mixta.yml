@@ -1,0 +1,150 @@
+---
+# Deploy Guesswho (Mixta GW) MySQL + Flask stack to the VPS, verify HTTP 200 on Flask,
+# then remove docker-compose.yml from the server (containers keep running; .env.prod stays).
+#
+# Prerequisites:
+#   - app_dev/.env.prod at repo root (gitignored) with MYSQL_* and FLASK_PORT=5002
+#   - Optional in .env.prod: MIXTA_FLASK_IMAGE=youruser/mixtagw_flask_app:tag
+#   - Ansible inventory: playbooks/rop01/inventory.ini (rop01_user + SSH key)
+#
+# Run from app_dev:
+#   ansible-playbook -i playbooks/rop01/inventory.ini playbooks/rop01/09_deploy_guesswho_mixta.yml
+#
+# Remote layout (aligned with /opt/apps/reignofplay/dutch):
+#   /opt/apps/reignofplay/guesswho/docker-compose.yml   ← copied during deploy, removed after health OK
+#   /opt/apps/reignofplay/guesswho/.env.prod            ← copy of app_dev/.env.prod (kept)
+#
+# Re-run this playbook to refresh compose from the repo and roll the stack.
+
+- name: Require local .env.prod for Guesswho deploy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    local_env_path: "{{ playbook_dir }}/../../.env.prod"
+    local_compose_src: "{{ playbook_dir }}/../../docker-compose.guesswho.vps.yml"
+  tasks:
+    - name: Stat local .env.prod
+      stat:
+        path: "{{ local_env_path }}"
+      register: local_env_stat
+
+    - name: Stat docker-compose.guesswho.vps.yml
+      stat:
+        path: "{{ local_compose_src }}"
+      register: local_compose_stat
+
+    - name: Fail if .env.prod missing
+      fail:
+        msg: "Create app_dev/.env.prod (see env.prod.example) before running this playbook."
+      when: not local_env_stat.stat.exists | default(false)
+
+    - name: Fail if compose file missing
+      fail:
+        msg: "Expected {{ local_compose_src }} — add docker-compose.guesswho.vps.yml to the repo root."
+      when: not local_compose_stat.stat.exists | default(false)
+
+- name: Deploy Guesswho Mixta stack to VPS
+  hosts: "{{ (vm_name | default('rop01')) }}_user"
+  become: true
+  vars:
+    guesswho_dir: "/opt/apps/reignofplay/guesswho"
+    vps_user: "{{ (vm_name | default('rop01')) }}_user"
+    local_repo_root: "{{ playbook_dir }}/../.."
+    compose_dest_name: "docker-compose.yml"
+    flask_health_url: "http://127.0.0.1:5002/"
+    health_retries: 35
+    health_delay_sec: 2
+  tasks:
+    - name: Create Guesswho app directory
+      file:
+        path: "{{ guesswho_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+
+    - name: Copy VPS compose file
+      copy:
+        src: "{{ local_repo_root }}/docker-compose.guesswho.vps.yml"
+        dest: "{{ guesswho_dir }}/{{ compose_dest_name }}"
+        mode: "0644"
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+
+    - name: Copy .env.prod to server
+      copy:
+        src: "{{ local_repo_root }}/.env.prod"
+        dest: "{{ guesswho_dir }}/.env.prod"
+        mode: "0600"
+        owner: "{{ vps_user }}"
+        group: "{{ vps_user }}"
+
+    - name: Validate compose config (syntax + env interpolation)
+      become_user: "{{ vps_user }}"
+      shell: |
+        set -e
+        cd "{{ guesswho_dir }}"
+        sg docker -c "docker compose --env-file .env.prod -f {{ compose_dest_name }} config >/dev/null"
+      register: compose_validate
+      changed_when: false
+
+    - name: Pull images and start stack
+      become_user: "{{ vps_user }}"
+      shell: |
+        set -e
+        cd "{{ guesswho_dir }}"
+        sg docker -c "docker compose --env-file .env.prod -f {{ compose_dest_name }} pull"
+        sg docker -c "docker compose --env-file .env.prod -f {{ compose_dest_name }} up -d"
+      register: compose_up
+
+    - name: Show container status before health check
+      become_user: "{{ vps_user }}"
+      shell: |
+        cd "{{ guesswho_dir }}"
+        sg docker -c "docker compose --env-file .env.prod -f {{ compose_dest_name }} ps"
+      register: compose_ps
+      changed_when: false
+
+    - name: Wait for Flask to return HTTP 200 on localhost
+      become_user: "{{ vps_user }}"
+      shell: |
+        set -e
+        for i in $(seq 1 {{ health_retries | int }}); do
+          code=$(curl -sS -o /dev/null -w "%{http_code}" "{{ flask_health_url }}" 2>/dev/null || echo "000")
+          if [ "$code" = "200" ]; then
+            echo "ok iteration=$i"
+            exit 0
+          fi
+          sleep {{ health_delay_sec | int }}
+        done
+        echo "last_http=$code"
+        exit 1
+      register: flask_health
+      changed_when: false
+
+    - name: Remove docker-compose.yml from VPS after successful health check
+      file:
+        path: "{{ guesswho_dir }}/{{ compose_dest_name }}"
+        state: absent
+      when: flask_health.rc == 0
+
+    - name: Fail if health check did not pass (compose file kept for debugging)
+      fail:
+        msg: |
+          Flask did not return HTTP 200 at {{ flask_health_url }} within the retry window.
+          docker-compose.yml was not deleted. Inspect: sg docker -c 'docker compose -f {{ guesswho_dir }}/{{ compose_dest_name }} logs'
+          Output: {{ flask_health.stdout | default('') }} {{ flask_health.stderr | default('') }}
+      when: flask_health.rc != 0
+
+    - name: Deploy summary
+      debug:
+        msg: |
+          Guesswho Mixta stack is up; docker-compose.yml removed from {{ guesswho_dir }}/
+
+          .env.prod remains (mode 0600). Re-run this playbook to apply compose or image changes.
+
+          Pre-removal container status:
+          {{ compose_ps.stdout }}
+
+          Health: {{ flask_health.stdout | default('') }}

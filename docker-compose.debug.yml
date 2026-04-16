@@ -1,4 +1,5 @@
 # Mixta local dev: MySQL only. Creds from `.env.local`.
+# Full stack (MySQL + Flask): see `docker-compose.prod.yml` + `env.prod.example` → `.env.prod`.
 # Project name `mixta_dev` (below) keeps this stack distinct from any other compose project on your machine.
 # Run: `docker compose --env-file .env.local -f docker-compose.debug.yml up -d`
 # Compose interpolates `${...}` from `--env-file`; a default `.env` alone may not define MYSQL_* .

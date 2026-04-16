@@ -1,0 +1,66 @@
+# Guesswho / Mixta GW Flask on VPS — MySQL + pre-built Flask image from Docker Hub.
+# No local build context: deploy this file + .env.prod under /opt/apps/reignofplay/guesswho/
+#
+# Image default: silvella/mixtagw_flask_app:latest (override with MIXTA_FLASK_IMAGE in .env.prod).
+#
+# On the server (as rop01_user, docker group):
+#   cd /opt/apps/reignofplay/guesswho
+#   docker compose --env-file .env.prod -f docker-compose.yml pull
+#   docker compose --env-file .env.prod -f docker-compose.yml up -d
+#
+# From your laptop:
+#   ansible-playbook -i playbooks/rop01/inventory.ini playbooks/rop01/09_deploy_guesswho_mixta.yml
+
+name: mixta_prod
+
+services:
+  mixta_mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mixta_mysql_prod_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+    networks:
+      - mixta_internal
+
+  mixta_flask:
+    image: ${MIXTA_FLASK_IMAGE:-silvella/mixtagw_flask_app:latest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      mixta_mysql:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      DB_HOST: mixta_mysql
+      DB_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DB: ${MYSQL_DB}
+      PYTHONUNBUFFERED: "1"
+      FLASK_PORT: ${FLASK_PORT:-5002}
+    ports:
+      - "127.0.0.1:5002:5002"
+    networks:
+      - mixta_internal
+
+volumes:
+  mixta_mysql_prod_data:
+
+networks:
+  mixta_internal:
+    driver: bridge

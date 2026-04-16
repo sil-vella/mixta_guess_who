@@ -1,0 +1,79 @@
+# Mixta production-style stack: MySQL + Flask on one internal network.
+# Flask connects via connection_mysql_module using MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB,
+# DB_HOST (set to service name `mixta_mysql`), DB_PORT (3306 inside the network).
+#
+# Setup:
+#   cp env.prod.example .env.prod
+#   # edit .env.prod — set passwords and MYSQL_DB
+#
+# Run (from repo root, builds local image mixtagw_flask_app:prod):
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml build
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+#
+# VPS (Hub image, no mixta_flask build context on server):
+#   Remote dir: /opt/apps/reignofplay/guesswho/
+#     docker-compose.yml  ← from docker-compose.guesswho.vps.yml
+#     .env.prod           ← same secrets as local; optional MIXTA_FLASK_IMAGE
+#   Deploy from laptop: ansible-playbook -i playbooks/rop01/inventory.ini playbooks/rop01/09_deploy_guesswho_mixta.yml
+#   Manual on server: cd /opt/apps/reignofplay/guesswho && sg docker -c 'docker compose --env-file .env.prod pull && docker compose --env-file .env.prod up -d'
+#
+# Flask listens on host 127.0.0.1:5002 only (matches e.g. guesswho.mixta.mt nginx → 127.0.0.1:5002).
+# MySQL is not published to the host by default. Uncomment `ports` under mixta_mysql for local admin tools.
+
+name: mixta_prod
+
+services:
+  mixta_mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mixta_mysql_prod_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+    networks:
+      - mixta_internal
+    # ports:
+    #   - "127.0.0.1:${DB_PORT:-3307}:3306"
+
+  mixta_flask:
+    build:
+      context: ./mixta_flask
+      dockerfile: Dockerfile
+    image: mixtagw_flask_app:prod
+    restart: unless-stopped
+    depends_on:
+      mixta_mysql:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      DB_HOST: mixta_mysql
+      DB_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DB: ${MYSQL_DB}
+      PYTHONUNBUFFERED: "1"
+      FLASK_PORT: ${FLASK_PORT:-5002}
+    ports:
+      - "127.0.0.1:5002:5002"
+    networks:
+      - mixta_internal
+
+volumes:
+  mixta_mysql_prod_data:
+
+networks:
+  mixta_internal:
+    driver: bridge

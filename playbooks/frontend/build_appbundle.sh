@@ -23,8 +23,8 @@ if [ "$BACKEND_TARGET" = "local" ]; then
     WS_URL="ws://192.168.178.81:8080"
     echo "💻 Using LOCAL backend: API_URL=$API_URL, WS_URL=$WS_URL"
 else
-    API_URL="https://dutch.mt"
-    WS_URL="wss://dutch.mt/ws"
+    API_URL="https://guesswho.mixta.mt"
+    WS_URL="wss://guesswho.mixta.mt/ws"
     echo "🌐 Using VPS backend: API_URL=$API_URL, WS_URL=$WS_URL"
 fi
 

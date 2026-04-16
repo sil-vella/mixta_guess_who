@@ -218,13 +218,33 @@ class QuestionModule:
         self._image_dir_mtime = mtime
         return self._image_files_cache
 
+    def _public_base_url(self):
+        """
+        Base URL for absolute image links returned to clients.
+
+        Behind nginx, ``request.host_url`` is often ``http://`` even for HTTPS clients,
+        which breaks Flutter web (mixed content). Prefer ``PUBLIC_BASE_URL``, then
+        ``X-Forwarded-Proto`` / ``X-Forwarded-Host``, then ``request.host_url``.
+        """
+        explicit = (os.environ.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+        if explicit:
+            return explicit
+        proto = (request.headers.get("X-Forwarded-Proto") or request.scheme or "http").strip()
+        if "," in proto:
+            proto = proto.split(",")[0].strip()
+        host = (request.headers.get("X-Forwarded-Host") or request.host or "").strip()
+        if not host:
+            return request.host_url.rstrip("/")
+        return f"{proto}://{host}".rstrip("/")
+
     def get_image_url(self, name):
         """Retrieve the image URL for a given name from the images directory."""
         formatted_name = self.normalize_name(name)
         image_files = self._list_image_files()
+        base = self._public_base_url()
         custom_log(f"🖼️ Resolving image for '{formatted_name}' against {len(image_files)} files")
         for filename in image_files:
             if filename.lower().startswith(formatted_name.lower()):  # ✅ Case-insensitive file matching
-                return f"{request.host_url.rstrip('/')}/images/{filename}"
+                return f"{base}/images/{filename}"
 
-        return f"{request.host_url.rstrip('/')}/images/default.jpg"
+        return f"{base}/images/default.jpg"

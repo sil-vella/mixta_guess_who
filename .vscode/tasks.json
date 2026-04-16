@@ -4,7 +4,7 @@
         {
             "label": "Kill Flask and Dart Processes",
             "type": "shell",
-            "command": "cd ${workspaceFolder} && (pkill -9 -f 'dart.*app\.dart' 2>/dev/null || true) && (pkill -9 -f 'python.*mixta_flask.*main\.py' 2>/dev/null || true) && (pkill -9 -f 'python.*app\.debug' 2>/dev/null || true) && for port in 5001 8080; do pids=$(lsof -ti :$port 2>/dev/null); if [ -n \"$pids\" ]; then echo \"🔪 Killing processes on port $port: $pids\"; echo $pids | xargs kill -9 2>/dev/null || true; sleep 0.5; fi; done; sleep 2; remaining=$(lsof -ti :5001 :8080 2>/dev/null | wc -l | tr -d ' '); if [ \"$remaining\" -gt 0 ]; then echo \"⚠️ Warning: Some processes may still be running\"; else echo \"✅ Ports 5001 and 8080 are now free\"; fi",
+            "command": "cd ${workspaceFolder} && (pkill -9 -f 'dart.*app\.dart' 2>/dev/null || true) && (pkill -9 -f 'python.*mixta_flask.*main\.py' 2>/dev/null || true) && (pkill -9 -f 'python.*app\.debug' 2>/dev/null || true) && for port in 5002 8080; do pids=$(lsof -ti :$port 2>/dev/null); if [ -n \"$pids\" ]; then echo \"🔪 Killing processes on port $port: $pids\"; echo $pids | xargs kill -9 2>/dev/null || true; sleep 0.5; fi; done; sleep 2; remaining=$(lsof -ti :5002 :8080 2>/dev/null | wc -l | tr -d ' '); if [ \"$remaining\" -gt 0 ]; then echo \"⚠️ Warning: Some processes may still be running\"; else echo \"✅ Ports 5002 and 8080 are now free\"; fi",
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",

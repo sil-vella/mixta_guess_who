@@ -6,12 +6,12 @@ The app calls the backend with:
 
 - **Path:** `GET /public/check-updates?current_version=<installed_version>`
 - **Base URL:** From `API_URL` (compile-time `--dart-define=API_URL=...`).
-  - **VPS APK (build_apk.sh default):** `https://dutch.mt`
+  - **VPS APK (build_apk.sh default):** `https://guesswho.mixta.mt`
   - **Local build:** `http://10.0.2.2:8081` or value from env.
 
 **Full URL (VPS):**
 ```text
-https://dutch.mt/public/check-updates?current_version=2.0.4
+https://guesswho.mixta.mt/public/check-updates?current_version=2.0.4
 ```
 (No trailing slash; `current_version` is the app’s `PackageInfo.version`.)
 

@@ -2,8 +2,8 @@
 
 # Flutter Web build script
 # Builds a web release for Dutch and uploads to VPS
-# The web app will be served from dutch.mt
-# To deploy to a subdir (e.g. dutch.mt/example): DEPLOY_SUBDIR=example ./build_web.sh vps
+# The web app will be served from guesswho.mixta.mt
+# To deploy to a subdir (e.g. guesswho.mixta.mt/example): DEPLOY_SUBDIR=example ./build_web.sh vps
 #   (Build the Flutter app with base-href /example/ when targeting the subdir.)
 
 set -e
@@ -24,8 +24,8 @@ if [ "$BACKEND_TARGET" = "local" ]; then
     WS_URL="ws://192.168.178.81:8080"
     echo "💻 Using LOCAL backend: API_URL=$API_URL, WS_URL=$WS_URL"
 else
-    API_URL="https://dutch.mt"
-    WS_URL="wss://dutch.mt/ws"
+    API_URL="https://guesswho.mixta.mt"
+    WS_URL="wss://guesswho.mixta.mt/ws"
     echo "🌐 Using VPS backend: API_URL=$API_URL, WS_URL=$WS_URL"
 fi
 
@@ -227,7 +227,7 @@ if [ "$BACKEND_TARGET" = "vps" ]; then
   # Move files to web root with proper permissions
   echo "📦 Installing files to web root..."
   ssh -i "$VPS_SSH_KEY" "$VPS_SSH_TARGET" <<EOF
-    # Copy to subdir (e.g. dutch.mt/example) or to main web root
+    # Copy to subdir (e.g. guesswho.mixta.mt/example) or to main web root
     DEPLOY_SUBDIR="${DEPLOY_SUBDIR:-}"
     if [ -n "$DEPLOY_SUBDIR" ]; then
       DEPLOY_DEST="$REMOTE_WEB_ROOT/$DEPLOY_SUBDIR"
@@ -275,10 +275,10 @@ EOF
   echo ""
   if [ -n "${DEPLOY_SUBDIR:-}" ]; then
     echo "✅ Web build uploaded to VPS: $REMOTE_WEB_ROOT/$DEPLOY_SUBDIR"
-    echo "🔗 Web app URL: https://dutch.mt/$DEPLOY_SUBDIR"
+    echo "🔗 Web app URL: https://guesswho.mixta.mt/$DEPLOY_SUBDIR"
   else
     echo "✅ Web build uploaded and installed to VPS: $REMOTE_WEB_ROOT"
-    echo "🔗 Web app URL: https://dutch.mt"
+    echo "🔗 Web app URL: https://guesswho.mixta.mt"
   fi
   echo "📊 Version: $APP_VERSION"
   echo ""

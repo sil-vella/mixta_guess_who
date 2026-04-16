@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Build and Push Docker Image Script
-This script builds the Flask app Docker image and pushes it to Docker Hub.
-Before build, it sets LOGGING_SWITCH = False where assignments are True (production-quiet).
-custom_log(...) calls are left intact so multi-line calls cannot be broken by naive commenting.
+Builds the Mixtagw Flask image from `mixta_flask/` (Dockerfile + context) and pushes to Docker Hub.
+Before build, sets LOGGING_SWITCH = False where assignments are True (production-quiet) under the build context.
+Override repository name: IMAGE_NAME=other_name (default: mixtagw_flask_app → image DOCKER_USERNAME/mixtagw_flask_app:tag).
 """
 
 import os
@@ -26,10 +26,11 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
 # Configuration
 DOCKER_USERNAME = os.environ.get('DOCKER_USERNAME', 'silvella')
-IMAGE_NAME = 'dutch_flask_app'
+IMAGE_NAME = os.environ.get('IMAGE_NAME', 'mixtagw_flask_app')
 IMAGE_TAG = os.environ.get('IMAGE_TAG', 'latest')
-DOCKERFILE_PATH = PROJECT_ROOT / 'python_base_04' / 'Dockerfile'
-BUILD_CONTEXT = PROJECT_ROOT / 'python_base_04'
+MIXTA_FLASK_DIR = PROJECT_ROOT / 'mixta_flask'
+DOCKERFILE_PATH = MIXTA_FLASK_DIR / 'Dockerfile'
+BUILD_CONTEXT = MIXTA_FLASK_DIR
 
 # Original file contents for files we modified (path -> text)
 LOGGING_SWITCH_BACKUP: dict[Path, str] = {}
