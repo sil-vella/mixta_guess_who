@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Flutter App Bundle (AAB) build script
-# Builds an Android App Bundle for Dutch with the same dart-define envs
-# used by build_apk.sh and the OnePlus launcher script (local or vps backend).
+# Builds an Android App Bundle for Dutch with the same dart-define/env flow
+# as build_apk.sh (local or vps backend).
 # Output is for Play Store upload; no VPS upload.
 
 set -e
@@ -37,37 +37,10 @@ if [ -f "$FRONTEND_ENV" ]; then
 else
   echo "⚠️  Warning: $FRONTEND_ENV not found — dart-defines (Firebase, Google Sign-In, etc.) will be empty."
 fi
-CURRENT_VERSION="${APP_VERSION:-2.0.0}"
-
-echo ""
-echo "📦 Current version (APP_VERSION from .env.prod): $CURRENT_VERSION"
-
-# Auto-bump patch version for each bundle build
-IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-MAJOR=${MAJOR:-0}
-MINOR=${MINOR:-0}
-PATCH=${PATCH:-0}
-if ! [[ "$MAJOR" =~ ^[0-9]+$ ]]; then MAJOR=0; fi
-if ! [[ "$MINOR" =~ ^[0-9]+$ ]]; then MINOR=0; fi
-if ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then PATCH=0; fi
-PATCH=$((PATCH + 1))
-APP_VERSION="$MAJOR.$MINOR.$PATCH"
-
-# Write bumped version to .env.prod (APP_VERSION=)
-ENV_FILE="$FRONTEND_ENV"
-if [ -f "$ENV_FILE" ] && grep -q '^APP_VERSION=' "$ENV_FILE" 2>/dev/null; then
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s/^APP_VERSION=.*/APP_VERSION=$APP_VERSION/" "$ENV_FILE"
-  else
-    sed -i "s/^APP_VERSION=.*/APP_VERSION=$APP_VERSION/" "$ENV_FILE"
-  fi
-else
-  echo "APP_VERSION=$APP_VERSION" >> "$ENV_FILE"
-fi
-echo "✅ Version bumped: $CURRENT_VERSION → $APP_VERSION"
-echo "📝 Updated APP_VERSION in $ENV_FILE"
-echo ""
-echo "📦 Building with APP_VERSION=$APP_VERSION"
+# APP_VERSION SSOT: .env.prod; interactive patch bump shared with build_apk.sh
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/bump_app_version_prompt.sh"
+bump_app_version_prompt
 
 # Derive a numeric build number from APP_VERSION (e.g. 2.1.0 -> 20100)
 IFS='.' read -r APP_MAJOR APP_MINOR APP_PATCH <<< "$APP_VERSION"
@@ -136,6 +109,8 @@ while IFS= read -r line; do
 done < <(build_dart_defines_from_env "$FRONTEND_ENV")
 # Overrides (script-set API_URL, WS_URL, APP_VERSION)
 DART_DEFINE_ARGS+=( --dart-define=API_URL="$API_URL" --dart-define=WS_URL="$WS_URL" --dart-define=APP_VERSION="$APP_VERSION" )
+# Ensure Firebase runtime toggle is always present (defaults to true when missing).
+DART_DEFINE_ARGS+=( --dart-define=FIREBASE_SWITCH="${FIREBASE_SWITCH:-true}" )
 # Build-only (not in .env)
 DART_DEFINE_ARGS+=( \
   --dart-define=JWT_ACCESS_TOKEN_EXPIRES=3600 \

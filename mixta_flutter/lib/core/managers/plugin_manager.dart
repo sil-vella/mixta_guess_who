@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../plugins/adverts_plugin/adverts_plugin_main.dart';
 import '../../plugins/game_plugin/game_plugin_main.dart';
 import '../../plugins/main_plugin/main_plugin_main.dart';
 import '../../tools/logging/logger.dart';
 import '../00_base/plugin_base.dart';
 import 'hooks_manager.dart';
-import 'module_manager.dart';
-import 'state_manager.dart';
 
 class PluginManager extends ChangeNotifier {
   static final Logger _log = Logger();
@@ -43,7 +39,6 @@ class PluginManager extends ChangeNotifier {
   Future<void> initializePlugins(BuildContext context) async {
     registerPlugin(context, "main_plugin", MainPlugin());
     registerPlugin(context, "game_plugin", GamePlugin());
-    registerPlugin(context, "adverts_plugin", AdvertsPlugin());
 
     _log.info("✅ All plugins registered.");
   }
