@@ -43,8 +43,12 @@ class ConnectionMySqlModule:
 
     def fetch_from_db(self, query, params=None, as_dict=False):
         """Execute a SELECT query and return results while handling transaction errors properly."""
+        connection = None
         try:
             connection = self.get_connection()
+            if connection is None:
+                custom_log("❌ Cannot execute SELECT: no database connection available")
+                return None
             cursor = connection.cursor(dictionary=as_dict)
             cursor.execute(query, params or ())
             result = cursor.fetchall()
@@ -52,13 +56,18 @@ class ConnectionMySqlModule:
             return result
         except mysql.connector.Error as e:
             custom_log(f"❌ Database error in SELECT: {e}")
-            connection.rollback()  # ✅ Rollback transaction if an error occurs
+            if connection is not None:
+                connection.rollback()  # ✅ Rollback transaction if an error occurs
             return None
 
     def execute_query(self, query, params=None):
         """Execute INSERT, UPDATE, or DELETE queries while handling errors properly."""
+        connection = None
         try:
             connection = self.get_connection()
+            if connection is None:
+                custom_log("❌ Cannot execute query: no database connection available")
+                return False
             cursor = connection.cursor()
 
             cursor.execute(query, params or ())
@@ -66,13 +75,20 @@ class ConnectionMySqlModule:
             cursor.close()
             
             custom_log("✅ Query executed successfully")
+            return True
         except mysql.connector.Error as e:
             custom_log(f"❌ Error executing query: {e}")
-            connection.rollback()  # ✅ Rollback to prevent transaction issues
+            if connection is not None:
+                connection.rollback()  # ✅ Rollback to prevent transaction issues
+            return False
 
     def initialize_database(self):
         """Ensure required tables exist in the database."""
         custom_log("⚙️ Initializing database tables...")
+
+        if self.get_connection() is None:
+            custom_log("⚠️ Skipping table initialization: database is not reachable")
+            return
 
         self._create_users_table()
         self._create_user_category_progress_table()
