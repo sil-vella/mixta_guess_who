@@ -12,6 +12,8 @@ class GameImageGrid extends StatefulWidget {
   final Function(String) onImageTap;
   final Function() onAllImagesLoaded;
   final Set<String> fadedImages;
+  /// Set after [onImageTap] resolves; drives green vs red selection border.
+  final bool? selectionCorrect;
 
   const GameImageGrid({
     Key? key,
@@ -19,6 +21,7 @@ class GameImageGrid extends StatefulWidget {
     required this.onImageTap,
     required this.onAllImagesLoaded,
     required this.fadedImages,
+    this.selectionCorrect,
   }) : super(key: key);
 
   @override
@@ -121,9 +124,25 @@ class _GameImageGridState extends State<GameImageGrid> {
     );
   }
 
+  Color _selectionBorderColor(bool isSelected) {
+    if (!isSelected) return AppColors.accentColor;
+    if (widget.selectionCorrect == null) return AppColors.accentColor;
+    return widget.selectionCorrect! ? Colors.greenAccent : AppColors.redAccent;
+  }
+
+  Color? _selectionGlowColor(bool isSelected) {
+    if (!isSelected || widget.selectionCorrect == null) return null;
+    final base = widget.selectionCorrect! ? Colors.greenAccent : AppColors.redAccent;
+    return base.withOpacity(0.8);
+  }
+
   Widget _buildImageBox(String imageUrl) {
     bool isFaded = widget.fadedImages.contains(imageUrl);
     bool isSelected = selectedImage == imageUrl;
+    final borderColor = isFaded
+        ? AppColors.lightGray
+        : _selectionBorderColor(isSelected);
+    final glowColor = isFaded ? null : _selectionGlowColor(isSelected);
 
     Logger().info("📸 Checking if selected: $imageUrl -> ${isSelected ? "Selected" : "Not Selected"}");
 
@@ -139,20 +158,18 @@ class _GameImageGridState extends State<GameImageGrid> {
           margin: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             border: Border.all(
-              color: isSelected
-                  ? Colors.greenAccent // ✅ Selected image gets a green border
-                  : (isFaded ? Colors.grey : AppColors.accentColor),
-              width: isSelected ? 6.0 : (isFaded ? 2.5 : 3.0), // ✅ Thicker border for selected image
+              color: borderColor,
+              width: isSelected ? 6.0 : (isFaded ? 2.5 : 3.0),
             ),
             borderRadius: BorderRadius.circular(8.0),
-            boxShadow: isSelected
+            boxShadow: glowColor != null
                 ? [
-              BoxShadow(
-                color: Colors.greenAccent.withOpacity(0.8),
-                blurRadius: 20,
-                spreadRadius: 4,
-              ),
-            ]
+                    BoxShadow(
+                      color: glowColor,
+                      blurRadius: 20,
+                      spreadRadius: 4,
+                    ),
+                  ]
                 : [],
           ),
           child: ClipRRect(

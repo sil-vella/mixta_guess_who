@@ -33,9 +33,13 @@ class QuestionModule:
         # One-time load so the first client request does not parse multi‑MB YAML under HTTP timeout.
         custom_log("⏳ QuestionModule: preloading YAML caches (may take ~30s once for celeb_data.yml)...")
         warm0 = time.perf_counter()
-        self.load_yaml(self.NAMES_YAML_PATH)
-        self.load_yaml(self.DATA_YAML_PATH)
+        names_data = self.load_yaml(self.NAMES_YAML_PATH)
+        celeb_data = self.load_yaml(self.DATA_YAML_PATH)
         self._list_image_files()
+        if not names_data:
+            custom_log(f"❌ QuestionModule: names YAML is empty — restore {self.NAMES_YAML_PATH}")
+        if not celeb_data:
+            custom_log(f"❌ QuestionModule: celeb_data YAML is empty — restore {self.DATA_YAML_PATH}")
         custom_log(f"✅ QuestionModule: YAML/image caches warmed in {int((time.perf_counter() - warm0) * 1000)}ms")
 
 
@@ -97,6 +101,9 @@ class QuestionModule:
         try:
             with open(file_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
+            if data is None:
+                custom_log(f"⚠️ YAML file is empty or null: {file_path}")
+                data = {}
             self._yaml_cache[file_path] = (mtime, data)
             return data
         except Exception as e:

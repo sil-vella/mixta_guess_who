@@ -114,8 +114,8 @@ class _FeedbackMessageState extends State<FeedbackMessage> {
               ElevatedButton(
                 onPressed: widget.onClose,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentColor,
-                  foregroundColor: Colors.black,
+                  backgroundColor: isCorrect ? Colors.greenAccent : AppColors.redAccent,
+                  foregroundColor: AppColors.darkGray,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                 ),

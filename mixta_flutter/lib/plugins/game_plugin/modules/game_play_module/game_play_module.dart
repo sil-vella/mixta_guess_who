@@ -29,9 +29,25 @@ class GamePlayModule extends ModuleBase {
   /// Level this round was loaded for (prefs at `roundInit`). Drives points/`update-rewards`, not `question['level']` alone.
   int? roundLevel;
 
-  void _finishRoundLoadWithError(Function updateState, String message) {
+  /// Hides [ScreenOverlay], which waits for imagesLoaded + factLoaded.
+  void _dismissLoadingOverlay(StateManager stateManager) {
+    stateManager.updatePluginState("game_round", {
+      "imagesLoaded": true,
+      "factLoaded": true,
+    }, force: true);
+  }
+
+  void _finishRoundLoadWithError(
+    BuildContext context,
+    StateManager stateManager,
+    Function updateState,
+    String message,
+  ) {
     isLoading = false;
     feedbackMessage = message;
+    question = null;
+    imageOptions = [];
+    _dismissLoadingOverlay(stateManager);
     _log.error(message);
     updateState();
   }
@@ -70,14 +86,24 @@ class GamePlayModule extends ModuleBase {
     updateState();
 
     if (sharedPref == null) {
-      _finishRoundLoadWithError(updateState, "❌ SharedPrefManager not found!");
+      _finishRoundLoadWithError(
+        context,
+        stateManager,
+        updateState,
+        "❌ SharedPrefManager not found!",
+      );
       return;
     }
 
     final questionModule = Provider.of<ModuleManager>(context, listen: false).getLatestModule<QuestionModule>();
 
     if (questionModule == null) {
-      _finishRoundLoadWithError(updateState, "❌ QuestionModule not found!");
+      _finishRoundLoadWithError(
+        context,
+        stateManager,
+        updateState,
+        "❌ QuestionModule not found!",
+      );
       return;
     }
 
@@ -124,6 +150,7 @@ class GamePlayModule extends ModuleBase {
             stateManager.updatePluginState("game_round", {"levelUp": true}, force: true);
             isLoading = false;
             feedbackMessage = "";
+            _dismissLoadingOverlay(stateManager);
             updateState();
           } else {
             _log.info(
@@ -132,10 +159,16 @@ class GamePlayModule extends ModuleBase {
             stateManager.updatePluginState("game_round", {"endGame": true}, force: true);
             isLoading = false;
             feedbackMessage = "";
+            _dismissLoadingOverlay(stateManager);
             updateState();
           }
         } else {
-          _finishRoundLoadWithError(updateState, "❌ Error fetching question: ${response['error']}");
+          _finishRoundLoadWithError(
+            context,
+            stateManager,
+            updateState,
+            "❌ Error fetching question: ${response['error']}",
+          );
         }
         return;
       }
@@ -157,7 +190,12 @@ class GamePlayModule extends ModuleBase {
 
     } catch (e) {
       roundLevel = null;
-      _finishRoundLoadWithError(updateState, "❌ Failed to fetch question: $e");
+      _finishRoundLoadWithError(
+        context,
+        stateManager,
+        updateState,
+        "❌ Failed to fetch question: $e",
+      );
       _log.error("❌ Failed to fetch question: $e", error: e);
     }
   }

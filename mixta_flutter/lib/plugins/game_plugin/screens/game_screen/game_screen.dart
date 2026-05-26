@@ -237,6 +237,7 @@ class GameScreenState extends BaseScreenState<GameScreen> {
 
     setState(() {
       _correctAnswer = null;
+      _lastSelectionCorrect = null;
       fadedImages.clear();
       _gamePlayModule?.imageOptions = [];
     });
@@ -317,6 +318,7 @@ class GameScreenState extends BaseScreenState<GameScreen> {
   }
 
   String? _correctAnswer; // ✅ Stores the correct answer dynamically
+  bool? _lastSelectionCorrect;
 
   void _handleAnswer(String selectedImage, {bool timeUp = false}) {
 
@@ -325,11 +327,13 @@ class GameScreenState extends BaseScreenState<GameScreen> {
 
 // ✅ Pass context to checkAnswer
     _gamePlayModule?.checkAnswer(context, selectedImage, () {
+      final isCorrect = _gamePlayModule!.feedbackMessage.contains('Correct');
       setState(() {
         _correctAnswer = selectedImage;
+        _lastSelectionCorrect = isCorrect;
       });
 
-      Logger().info("🔹 Correct answer $_correctAnswer");
+      Logger().info("🔹 Answer result: correct=$isCorrect | selected=$_correctAnswer");
 
       _updateFeedbackState(
         showFeedback: true,
@@ -380,6 +384,29 @@ class GameScreenState extends BaseScreenState<GameScreen> {
     _initializeGame(); // ✅ Reset game and change background
   }
 
+  Widget? _buildRoundLoadError() {
+    final module = _gamePlayModule;
+    if (module == null || module.isLoading || module.question != null) return null;
+    final msg = module.feedbackMessage;
+    if (msg.isEmpty) return null;
+
+    return Padding(
+      padding: AppPadding.defaultPadding,
+      child: Material(
+        color: AppColors.primaryColor,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: AppPadding.cardPadding,
+          child: Text(
+            msg.replaceFirst(RegExp(r'^❌\s*'), ''),
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.redAccent),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget buildContent(BuildContext context) {
     return Stack(
@@ -391,22 +418,25 @@ class GameScreenState extends BaseScreenState<GameScreen> {
               : Container(color: Colors.black),
         ),
 
-        SingleChildScrollView(
+        SafeArea(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ✅ Top bar with Level, TimerBar, and Points
+              if (_buildRoundLoadError() != null) _buildRoundLoadError()!,
               Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: AppPadding.defaultPadding,
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("⭐ Category Level: $_level",
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        Text("🏆 Points: $_points",
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(
+                          "⭐ Category Level: $_level",
+                          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          "🏆 Points: $_points",
+                          style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                     Consumer<StateManager>(
@@ -417,33 +447,29 @@ class GameScreenState extends BaseScreenState<GameScreen> {
                         final duration = (timerState["duration"] ?? 0).toDouble();
                         final int currentLevel = _level > 0 ? _level : 1;
                         final double levelTimer =
-                        (GamePlayConfig.levelTimers[currentLevel] ?? 10).toDouble();
+                            (GamePlayConfig.levelTimers[currentLevel] ?? 10).toDouble();
                         return isRunning
                             ? Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: TimerBar(remainingTime: duration, totalDuration: levelTimer),
-                          ),
-                        )
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: TimerBar(remainingTime: duration, totalDuration: levelTimer),
+                                ),
+                              )
                             : const SizedBox.shrink();
                       },
                     ),
                   ],
                 ),
               ),
-
               GameImageGrid(
-                imageOptions: _gamePlayModule?.imageOptions?.map((e) => e.toString()).toList() ?? [], // ✅ Prevent null
+                imageOptions: _gamePlayModule?.imageOptions?.map((e) => e.toString()).toList() ?? [],
                 onImageTap: _handleAnswer,
                 fadedImages: fadedImages,
-                onAllImagesLoaded: _onImagesLoaded, // ✅ Call when images are loaded
+                selectionCorrect: _lastSelectionCorrect,
+                onAllImagesLoaded: _onImagesLoaded,
               ),
-
-
-              const SizedBox(height: 20),
-
-              // ✅ Help Button (Center-aligned)
+              const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: _useHelp,
                 style: ElevatedButton.styleFrom(
@@ -454,17 +480,16 @@ class GameScreenState extends BaseScreenState<GameScreen> {
                 ),
                 child: const Text("💡 Use Help", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
-
-              const SizedBox(height: 20),
-
-              FactBox(
-                facts: (_gamePlayModule?.question?['facts'] as List<dynamic>?)
-                    ?.map((e) => e.toString())
-                    .toList() ??
-                    [], // ✅ Ensure facts is never null
-                onFactsLoaded: _onFactsLoaded,
+              const SizedBox(height: 12),
+              Expanded(
+                child: FactBox(
+                  facts: (_gamePlayModule?.question?['facts'] as List<dynamic>?)
+                          ?.map((e) => e.toString())
+                          .toList() ??
+                      [],
+                  onFactsLoaded: _onFactsLoaded,
+                ),
               ),
-
             ],
           ),
         ),
