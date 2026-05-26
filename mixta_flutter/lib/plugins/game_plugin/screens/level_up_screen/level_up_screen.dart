@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../../utils/navigation_utils.dart';
 import 'dart:math';
 import '../../../../core/00_base/screen_base.dart';
 import '../../../../core/managers/state_manager.dart';
@@ -72,7 +74,7 @@ class LevelUpScreenState extends BaseScreenState<LevelUpScreen> with TickerProvi
       "endGame": false,
     }, force: true);
     Logger().info("🎯 Leveling up → game (flags cleared)");
-    Navigator.pushReplacementNamed(context, "/game");
+    context.pushReplacement('/game');
   }
 
   void _handleEndGame() {
@@ -82,7 +84,7 @@ class LevelUpScreenState extends BaseScreenState<LevelUpScreen> with TickerProvi
       "endGame": false,
     }, force: true);
     Logger().info("🏆 Game completed → preferences (flags cleared)");
-    Navigator.pushReplacementNamed(context, "/preferences");
+    NavigationUtils.navigateReset(context, '/preferences');
   }
 
   @override

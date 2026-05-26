@@ -12,6 +12,7 @@ import '../../../../core/services/shared_preferences.dart';
 import '../../../../core/services/ticker_timer/ticker_timer.dart';
 import '../../../../tools/logging/logger.dart';
 import '../../../../utils/consts/theme_consts.dart';
+import '../../../../utils/navigation_utils.dart';
 import '../../../main_plugin/modules/main_helper_module/main_helper_module.dart';
 import '../../modules/game_play_module/config/gameplaymodule_config.dart';
 import '../../modules/game_play_module/game_play_module.dart';
@@ -216,7 +217,7 @@ class GameScreenState extends BaseScreenState<GameScreen> {
                 "endGame": false,
               }, force: true);
               if (completedCategory) {
-                Navigator.pushReplacementNamed(context, "/preferences");
+                NavigationUtils.navigateReset(context, '/preferences');
               } else {
                 _loadLevelAndPoints();
                 _startRoundFromScratch(traceId);

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../../utils/navigation_utils.dart';
 import '../../../../core/00_base/screen_base.dart';
 import '../../../../core/managers/module_manager.dart';
 import '../../../../core/managers/services_manager.dart';
@@ -194,7 +194,7 @@ class PreferencesScreenState extends BaseScreenState<PreferencesScreen> {
             Center(
               child: ElevatedButton(
                 onPressed: () {
-                  context.go("/progress");
+                  NavigationUtils.navigateForward(context, '/progress');
                 },
                 child: const Text("View Your Progress"),
               ),

@@ -266,7 +266,7 @@ Use this as a working task list; check off as completed.
 - [ ] **#1** Policy page live + Play Console URL (hosted HTML only — no app change)
 - [x] **#3** Fix fact/description scrolling + Expand bottom sheet (2026-05-26)
 - [x] **#4** Green/red answer feedback on grid + feedback Close button (2026-05-26)
-- [ ] **#2** `push` vs `go` + home double-back-to-exit
+- [x] **#2** `push` vs `go` + home double-back-to-exit (2026-05-26)
 - [ ] QA smoke on physical Android build (`version` bump in `pubspec.yaml`)
 
 ### Release B (quality)

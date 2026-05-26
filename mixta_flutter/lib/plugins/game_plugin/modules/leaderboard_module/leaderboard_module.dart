@@ -1,7 +1,7 @@
 import 'package:mixta_guess_who/plugins/main_plugin/modules/connections_module/connections_module.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../../utils/navigation_utils.dart';
 import '../../../../core/00_base/module_base.dart';
 import '../../../../core/managers/module_manager.dart';
 import '../../../../core/managers/services_manager.dart';
@@ -167,7 +167,7 @@ class LeaderboardModule extends ModuleBase {
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
-                onPressed: () => context.go("/preferences"),
+                onPressed: () => NavigationUtils.navigateForward(context, '/preferences'),
                 icon: const Icon(Icons.person_add_alt_1, color: AppColors.accentColor),
                 label: Text(
                   "Go to Preferences",

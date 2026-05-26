@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import '../../../../utils/navigation_utils.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/00_base/screen_base.dart';
 import '../../../../core/managers/services_manager.dart';
@@ -12,7 +12,7 @@ class ProgressScreen extends BaseScreen {
 
   @override
   String computeTitle(BuildContext context) {
-    return "Well Done!";
+    return 'Category Progress';
   }
 
   @override
@@ -182,7 +182,7 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => context.go('/preferences'),
+                  onPressed: () => NavigationUtils.navigateForward(context, '/preferences'),
                   child: Text(
                     'Go to Preferences',
                     style: AppTextStyles.bodyMedium.copyWith(color: AppColors.accentColor),
@@ -277,16 +277,12 @@ class ProgressScreenState extends BaseScreenState<ProgressScreen> {
 
   @override
   Widget buildContent(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Category Progress")),
-      backgroundColor: AppColors.scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          _buildTotalPointsCard(),
-          _buildGuestLeaderboardHint(),
-          _buildCategoryProgress(),
-        ],
-      ),
+    return Column(
+      children: [
+        _buildTotalPointsCard(),
+        _buildGuestLeaderboardHint(),
+        _buildCategoryProgress(),
+      ],
     );
   }
 }

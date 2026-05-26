@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../utils/consts/theme_consts.dart';
+import '../../utils/navigation_utils.dart';
 import '../managers/navigation_manager.dart';
 
 class CustomDrawer extends StatelessWidget {
@@ -23,13 +23,13 @@ class CustomDrawer extends StatelessWidget {
           ListTile(
             leading: Icon(Icons.home, color: AppColors.accentColor),
             title: Text('Home', style: AppTextStyles.bodyLarge),
-            onTap: () => context.go('/'), // ✅ Navigate to home
+            onTap: () => NavigationUtils.navigateFromDrawer(context, '/'),
           ),
           ...drawerRoutes.map((route) {
             return ListTile(
               leading: Icon(route.drawerIcon, color: AppColors.accentColor),
               title: Text(route.drawerTitle ?? '', style: AppTextStyles.bodyLarge),
-              onTap: () => context.go(route.path), // ✅ Navigate via GoRouter
+              onTap: () => NavigationUtils.navigateFromDrawer(context, route.path),
             );
           }),
         ],

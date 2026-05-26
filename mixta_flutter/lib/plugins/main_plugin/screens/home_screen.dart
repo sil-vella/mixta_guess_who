@@ -1,8 +1,8 @@
 import 'package:mixta_guess_who/plugins/main_plugin/modules/animations_module/animations_module.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/animation.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../utils/navigation_utils.dart';
 import '../../../core/00_base/screen_base.dart';
 import '../../../core/managers/app_manager.dart';
 import '../../../core/managers/module_manager.dart';
@@ -56,7 +56,7 @@ class HomeScreenState extends BaseScreenState<HomeScreen>
     // Update state and navigate when Play button is pressed
     void onPlayPressed() {
       stateManager.updateMainAppState('main_state', 'in_play');
-      context.go('/game'); // ✅ Use GoRouter navigation
+      NavigationUtils.navigateForward(context, '/game');
     }
 
 
